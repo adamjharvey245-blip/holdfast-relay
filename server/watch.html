@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AnchorSimple — Remote Watch</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a1628;
+      color: #f1f5f9;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #1e3a6e;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo { font-size: 18px; font-weight: 800; color: #f59e0b; letter-spacing: 2px; }
+    .code-badge {
+      background: #162d57;
+      border: 1px solid #1e3a6e;
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 6px;
+      color: #f59e0b;
+    }
+    #status-bar {
+      padding: 8px 20px;
+      font-size: 12px;
+      color: #64748b;
+      background: #04080f;
+      letter-spacing: 1px;
+    }
+    #status-bar.ok { color: #10b981; }
+    #status-bar.warn { color: #f59e0b; }
+    #status-bar.error { color: #ef4444; }
+
+    #map { flex: 1; min-height: 400px; background: #071225; }
+
+    .panel {
+      padding: 16px 20px;
+      border-top: 1px solid #1e3a6e;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .stat {
+      background: #0f2040;
+      border: 1px solid #1e3a6e;
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: #475569;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .stat-value.amber { color: #f59e0b; }
+    .stat-value.green { color: #10b981; }
+    .stat-value.red   { color: #ef4444; }
+
+    .alarm-banner {
+      display: none;
+      background: #ef4444;
+      color: #fff;
+      text-align: center;
+      padding: 10px;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      animation: blink 0.5s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    footer {
+      padding: 10px 20px;
+      font-size: 11px;
+      color: #334155;
+      text-align: center;
+      border-top: 1px solid #1e3a6e;
+    }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+
+<div id="alarm-banner" class="alarm-banner">ANCHOR DRAG ALARM</div>
+
+<header>
+  <span class="logo">⚓ ANCHORSIMPLE</span>
+  <span class="code-badge">__CODE__</span>
+</header>
+
+<div id="status-bar">Connecting...</div>
+
+<div id="map"></div>
+
+<div class="panel">
+  <div class="stat">
+    <div class="stat-label">DISTANCE FROM ANCHOR</div>
+    <div class="stat-value amber" id="stat-dist">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">ALARM STATUS</div>
+    <div class="stat-value green" id="stat-alarm">SILENT</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">BOAT POSITION</div>
+    <div class="stat-value" id="stat-pos" style="font-size:13px;margin-top:4px;">—</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">LAST UPDATE</div>
+    <div class="stat-value" id="stat-ts" style="font-size:14px;">—</div>
+  </div>
+</div>
+
+<footer>AnchorSimple remote watch — read-only view</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const CODE = document.querySelector('.code-badge').textContent.trim();
+  const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?code=${CODE}&role=watch`;
+
+  // ── Map setup ────────────────────────────────────────────────────────
+  const map = L.map('map', { zoomControl: true }).setView([55, -4], 15);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19,
+  }).addTo(map);
+
+  let boatMarker = null;
+  let anchorMarker = null;
+  let anchorCircle = null;
+  const trailCoords = [];
+  let trailLine = null;
+
+  const boatIcon = L.divIcon({ html: '⛵', className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
+  const anchorIcon = L.divIcon({ html: '⚓', className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
+
+  // ── WebSocket ────────────────────────────────────────────────────────
+  let ws;
+
+  function connect() {
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      setStatus('Connected — receiving live data', 'ok');
+    };
+
+    ws.onclose = () => {
+      setStatus('Disconnected — reconnecting...', 'error');
+      setTimeout(connect, 3000);
+    };
+
+    ws.onerror = () => {
+      setStatus('Connection error', 'error');
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        handleMessage(msg);
+      } catch {}
+    };
+  }
+
+  function handleMessage(msg) {
+    const ts = new Date(msg.ts).toLocaleTimeString();
+    document.getElementById('stat-ts').textContent = ts;
+
+    if (msg.type === 'position') {
+      const { lat, lng, distanceFromAnchor } = msg.payload;
+      const latlng = [lat, lng];
+
+      if (!boatMarker) {
+        boatMarker = L.marker(latlng, { icon: boatIcon }).addTo(map);
+        map.setView(latlng, 15);
+      } else {
+        boatMarker.setLatLng(latlng);
+      }
+
+      trailCoords.push(latlng);
+      if (trailCoords.length > 1000) trailCoords.shift();
+      if (trailLine) map.removeLayer(trailLine);
+      trailLine = L.polyline(trailCoords, { color: '#f1f5f9', weight: 2, opacity: 0.7 }).addTo(map);
+
+      document.getElementById('stat-dist').textContent =
+        distanceFromAnchor < 1000
+          ? `${Math.round(distanceFromAnchor)}m`
+          : `${(distanceFromAnchor / 1000).toFixed(2)}km`;
+
+      document.getElementById('stat-pos').textContent =
+        `${lat.toFixed(5)}°  ${lng.toFixed(5)}°`;
+    }
+
+    if (msg.type === 'anchor') {
+      const { lat, lng, radius } = msg.payload;
+      const latlng = [lat, lng];
+
+      if (!anchorMarker) {
+        anchorMarker = L.marker(latlng, { icon: anchorIcon }).addTo(map);
+      } else {
+        anchorMarker.setLatLng(latlng);
+      }
+
+      if (anchorCircle) map.removeLayer(anchorCircle);
+      anchorCircle = L.circle(latlng, {
+        radius,
+        color: '#10b981',
+        weight: 2,
+        fillOpacity: 0.05,
+      }).addTo(map);
+    }
+
+    if (msg.type === 'alarm') {
+      const { level } = msg.payload;
+      const el = document.getElementById('stat-alarm');
+      const banner = document.getElementById('alarm-banner');
+
+      const colorMap = { silent: 'green', nudge: 'amber', alert: 'amber', emergency: 'red' };
+      el.className = 'stat-value ' + (colorMap[level] || '');
+      el.textContent = level.toUpperCase();
+
+      if (level === 'emergency' || level === 'alert') {
+        banner.style.display = 'block';
+        banner.textContent = level === 'emergency' ? '🚨 ANCHOR DRAGGING — EMERGENCY' : '⚠️ ANCHOR DRAG ALERT';
+      } else {
+        banner.style.display = 'none';
+      }
+
+      if (anchorCircle) {
+        const colors = { silent: '#10b981', nudge: '#f59e0b', alert: '#f97316', emergency: '#ef4444' };
+        anchorCircle.setStyle({ color: colors[level] || '#10b981' });
+      }
+    }
+  }
+
+  function setStatus(msg, cls) {
+    const el = document.getElementById('status-bar');
+    el.textContent = msg;
+    el.className = cls || '';
+  }
+
+  connect();
+</script>
+</body>
+</html>
