@@ -343,7 +343,9 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
           gpsLostSoundKey: (saved_thresholds as AlarmThresholds).gpsLostSoundKey ?? DEFAULT_THRESHOLDS.gpsLostSoundKey,
         },
       });
-    } catch {}
+    } catch (e) {
+      console.error('[HoldFast] Failed to hydrate from storage:', e);
+    }
   },
 
   persistToStorage: async () => {
@@ -353,6 +355,8 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
         STORAGE_KEY,
         JSON.stringify({ anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight })
       );
-    } catch {}
+    } catch (e) {
+      console.error('[HoldFast] Failed to persist to storage:', e);
+    }
   },
 }));

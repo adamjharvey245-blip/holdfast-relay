@@ -163,9 +163,10 @@ export default function SettingsScreen() {
 
         {/* ABOUT */}
         <Section title="ABOUT">
-          <InfoRow label="App" value="HoldFast Anchor Alarm v1.0.0" />
+          <InfoRow label="App" value="HoldFast Anchor Alarm" />
+          <InfoRow label="Version" value="1.0.0 (build 5)" />
           <InfoRow label="GPS formula" value="Haversine (great-circle)" />
-          <InfoRow label="Background GPS" value="Expo Location (foreground + background task)" />
+          <InfoRow label="Background GPS" value="Expo Location task manager" />
         </Section>
 
       </ScrollView>

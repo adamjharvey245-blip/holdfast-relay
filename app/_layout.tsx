@@ -1,6 +1,6 @@
 import '../global.css';
-import { useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, View, Text, StyleSheet } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,6 +10,36 @@ import { useAlarmSystem } from '@/hooks/useAlarmSystem';
 import { useGpsTracker } from '@/hooks/useGpsTracker';
 import { relayClient, startRelayBroadcast } from '@/services/websocketRelay';
 import { ONBOARDING_KEY } from './onboarding';
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[HoldFast] Uncaught error:', error, info);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={errStyles.container}>
+          <Text style={errStyles.title}>Something went wrong</Text>
+          <Text style={errStyles.message}>{this.state.error.message}</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const errStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#0a1628', alignItems: 'center', justifyContent: 'center', padding: 32 },
+  title: { color: '#ef4444', fontSize: 18, fontWeight: '800', marginBottom: 12 },
+  message: { color: '#94a3b8', fontSize: 13, textAlign: 'center' },
+});
 
 function AppInit() {
   const { hydrateFromStorage, watchCode, boatPosition } = useAnchorStore();
@@ -58,6 +88,7 @@ function AppInit() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
       <AppInit />
       <StatusBar style="light" backgroundColor="#0C1B2C" />
       <Stack
@@ -95,6 +126,7 @@ export default function RootLayout() {
           options={{ headerShown: false }}
         />
       </Stack>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

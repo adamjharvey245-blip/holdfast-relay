@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, {
@@ -76,6 +76,64 @@ export function RadarMap({
     };
     mapRef.current.animateToRegion(region, 600);
   }, [displayBoatPosition, followBoat]);
+
+  // ── Distance ring data — computed outside JSX, never returns null ────────
+
+  const METRES_TO_LAT = 1 / 111320;
+
+  const ringData = useMemo(() => {
+    if (!anchorPosition || customZone) return { backgroundRings: [], watchLabel: '', labelMarkers: [] };
+
+    const interval =
+      latitudeDelta < 0.0008 ? 1 :
+      latitudeDelta < 0.003  ? 5 :
+      latitudeDelta < 0.012  ? 10 : 20;
+
+    const allRings: number[] = [];
+    for (let r = interval; r <= effectiveRadius * 2; r += interval) {
+      allRings.push(r);
+    }
+
+    const watchIdx = allRings.reduce((best, r, i) =>
+      Math.abs(r - effectiveRadius) < Math.abs(allRings[best] - effectiveRadius) ? i : best, 0);
+    const start = Math.max(0, Math.min(watchIdx - 4, allRings.length - 10));
+    const rings = allRings.slice(start, start + 10);
+
+    const step = Math.max(1, Math.floor(rings.length / 5));
+    const labelIndices = new Set<number>();
+    for (let i = 0; i < rings.length && labelIndices.size < 6; i += step) {
+      labelIndices.add(i);
+    }
+
+    // Background rings — exclude the watch ring
+    const backgroundRings = rings.filter(r => Math.abs(r - effectiveRadius) >= interval * 0.1);
+
+    // Label markers for background rings
+    const labelMarkers: { key: string; coord: { latitude: number; longitude: number }; label: string; anchor: { x: number; y: number } }[] = [];
+    rings.forEach((r, i) => {
+      if (!labelIndices.has(i)) return;
+      if (Math.abs(r - effectiveRadius) < interval * 0.1) return; // watch ring has its own labels
+      const label = r >= 1000 ? `${(r / 1000).toFixed(1)}km` : `${r}m`;
+      labelMarkers.push({
+        key: `lbl-top-${r}`,
+        coord: { latitude: anchorPosition.latitude + r * METRES_TO_LAT, longitude: anchorPosition.longitude },
+        label,
+        anchor: { x: 0.5, y: 1 },
+      });
+      labelMarkers.push({
+        key: `lbl-bot-${r}`,
+        coord: { latitude: anchorPosition.latitude - r * METRES_TO_LAT, longitude: anchorPosition.longitude },
+        label,
+        anchor: { x: 0.5, y: 0 },
+      });
+    });
+
+    const watchLabel = effectiveRadius >= 1000
+      ? `${(effectiveRadius / 1000).toFixed(1)}km`
+      : `${Math.round(effectiveRadius)}m`;
+
+    return { backgroundRings, watchLabel, labelMarkers };
+  }, [anchorPosition, customZone, latitudeDelta, effectiveRadius]);
 
   // ── Watch radius ring colour ──────────────────────────────────────────────
 
@@ -155,10 +213,9 @@ export function RadarMap({
           />
         )}
 
-        {/* Watch radius fill — rendered BEFORE rings so its position in the native layer is always stable */}
+        {/* Watch radius fill */}
         {anchorPosition && !customZone && (
           <Circle
-            key="watch-fill"
             center={anchorPosition}
             radius={effectiveRadius}
             strokeColor="transparent"
@@ -171,110 +228,69 @@ export function RadarMap({
           />
         )}
 
-        {/* Distance rings — background rings only; watch ring rendered separately for stability */}
-        {anchorPosition && !customZone && (() => {
-          const interval =
-            latitudeDelta < 0.0008 ? 1 :
-            latitudeDelta < 0.003  ? 5 :
-            latitudeDelta < 0.012  ? 10 : 20;
+        {/* Background distance rings */}
+        {anchorPosition && !customZone && ringData.backgroundRings.map(r => (
+          <Circle
+            key={`ring-${r}`}
+            center={anchorPosition}
+            radius={r}
+            strokeColor="rgba(255,255,255,0.45)"
+            strokeWidth={1}
+            fillColor="transparent"
+          />
+        ))}
 
-          const maxRingRadius = effectiveRadius * 2;
-          const allRings: number[] = [];
-          for (let r = interval; r <= maxRingRadius; r += interval) {
-            allRings.push(r);
-          }
+        {/* Background ring labels */}
+        {anchorPosition && !customZone && ringData.labelMarkers.map(m => (
+          <Marker
+            key={m.key}
+            identifier={m.key}
+            coordinate={m.coord}
+            anchor={m.anchor}
+            tracksViewChanges={false}
+          >
+            <View style={styles.ringLabel}>
+              <Text style={styles.ringLabelText}>{m.label}</Text>
+            </View>
+          </Marker>
+        ))}
 
-          const watchIdx = allRings.reduce((best, r, i) =>
-            Math.abs(r - effectiveRadius) < Math.abs(allRings[best] - effectiveRadius) ? i : best, 0);
-          const start = Math.max(0, Math.min(watchIdx - 4, allRings.length - 10));
-          const rings = allRings.slice(start, start + 10);
+        {/* Watch boundary ring */}
+        {anchorPosition && !customZone && (
+          <Circle
+            center={anchorPosition}
+            radius={effectiveRadius}
+            strokeColor="rgba(255,255,255,0.9)"
+            strokeWidth={2}
+            fillColor="transparent"
+          />
+        )}
 
-          const step = Math.max(1, Math.floor(rings.length / 5));
-          const labelIndices = new Set<number>();
-          for (let i = 0; i < rings.length && labelIndices.size < 6; i += step) {
-            labelIndices.add(i);
-          }
-
-          const metresToLat = 1 / 111320;
-
-          // Filter out the watch ring before mapping — never return null from MapView children (native bridge crash)
-          const backgroundRings = rings.filter(r => Math.abs(r - effectiveRadius) >= interval * 0.1);
-
-          return backgroundRings.map((r, i) => {
-            const showLabel = labelIndices.has(i);
-            const labelTop = {
-              latitude: anchorPosition.latitude + r * metresToLat,
-              longitude: anchorPosition.longitude,
-            };
-            const labelBottom = {
-              latitude: anchorPosition.latitude - r * metresToLat,
-              longitude: anchorPosition.longitude,
-            };
-            const label = r >= 1000 ? `${(r / 1000).toFixed(1)}km` : `${r}m`;
-            return (
-              <React.Fragment key={`ring-${r}`}>
-                <Circle
-                  center={anchorPosition}
-                  radius={r}
-                  strokeColor="rgba(255,255,255,0.45)"
-                  strokeWidth={1}
-                  fillColor="transparent"
-                />
-                {showLabel && (
-                  <>
-                    <Marker coordinate={labelTop} anchor={{ x: 0.5, y: 1 }} tracksViewChanges={false}>
-                      <View style={styles.ringLabel}>
-                        <Text style={styles.ringLabelText}>{label}</Text>
-                      </View>
-                    </Marker>
-                    <Marker coordinate={labelBottom} anchor={{ x: 0.5, y: 0 }} tracksViewChanges={false}>
-                      <View style={styles.ringLabel}>
-                        <Text style={styles.ringLabelText}>{label}</Text>
-                      </View>
-                    </Marker>
-                  </>
-                )}
-              </React.Fragment>
-            );
-          });
-        })()}
-
-        {/* Watch boundary ring — stable Fragment key prevents unmount/remount during radius changes */}
-        {anchorPosition && !customZone && (() => {
-          const metresToLat = 1 / 111320;
-          const label = effectiveRadius >= 1000
-            ? `${(effectiveRadius / 1000).toFixed(1)}km`
-            : `${Math.round(effectiveRadius)}m`;
-          return (
-            <React.Fragment key="watch-ring-stable">
-              <Circle
-                center={anchorPosition}
-                radius={effectiveRadius}
-                strokeColor="rgba(255,255,255,0.9)"
-                strokeWidth={2}
-                fillColor="transparent"
-              />
-              <Marker
-                coordinate={{ latitude: anchorPosition.latitude + effectiveRadius * metresToLat, longitude: anchorPosition.longitude }}
-                anchor={{ x: 0.5, y: 1 }}
-                tracksViewChanges={false}
-              >
-                <View style={styles.ringLabel}>
-                  <Text style={styles.ringLabelTextWatch}>{label}</Text>
-                </View>
-              </Marker>
-              <Marker
-                coordinate={{ latitude: anchorPosition.latitude - effectiveRadius * metresToLat, longitude: anchorPosition.longitude }}
-                anchor={{ x: 0.5, y: 0 }}
-                tracksViewChanges={false}
-              >
-                <View style={styles.ringLabel}>
-                  <Text style={styles.ringLabelTextWatch}>{label}</Text>
-                </View>
-              </Marker>
-            </React.Fragment>
-          );
-        })()}
+        {/* Watch ring labels — top and bottom */}
+        {anchorPosition && !customZone && (
+          <Marker
+            identifier="watch-label-top"
+            coordinate={{ latitude: anchorPosition.latitude + effectiveRadius * METRES_TO_LAT, longitude: anchorPosition.longitude }}
+            anchor={{ x: 0.5, y: 1 }}
+            tracksViewChanges={false}
+          >
+            <View style={styles.ringLabel}>
+              <Text style={styles.ringLabelTextWatch}>{ringData.watchLabel}</Text>
+            </View>
+          </Marker>
+        )}
+        {anchorPosition && !customZone && (
+          <Marker
+            identifier="watch-label-bot"
+            coordinate={{ latitude: anchorPosition.latitude - effectiveRadius * METRES_TO_LAT, longitude: anchorPosition.longitude }}
+            anchor={{ x: 0.5, y: 0 }}
+            tracksViewChanges={false}
+          >
+            <View style={styles.ringLabel}>
+              <Text style={styles.ringLabelTextWatch}>{ringData.watchLabel}</Text>
+            </View>
+          </Marker>
+        )}
 
 
         {/* Bearing line — dashed line from boat to anchor */}
