@@ -155,6 +155,22 @@ export function RadarMap({
           />
         )}
 
+        {/* Watch radius fill — rendered BEFORE rings so its position in the native layer is always stable */}
+        {anchorPosition && !customZone && (
+          <Circle
+            key="watch-fill"
+            center={anchorPosition}
+            radius={effectiveRadius}
+            strokeColor="transparent"
+            strokeWidth={0}
+            fillColor={
+              alarmLevel === 'emergency' ? 'rgba(239,68,68,0.15)' :
+              alarmLevel === 'alert'     ? 'rgba(249,115,22,0.15)' :
+                                           'rgba(16,185,129,0.12)'
+            }
+          />
+        )}
+
         {/* Distance rings — background rings only; watch ring rendered separately for stability */}
         {anchorPosition && !customZone && (() => {
           const interval =
@@ -181,9 +197,10 @@ export function RadarMap({
 
           const metresToLat = 1 / 111320;
 
-          return rings.map((r, i) => {
-            const isWatchRing = Math.abs(r - effectiveRadius) < interval * 0.1;
-            if (isWatchRing) return null; // watch ring rendered separately below
+          // Filter out the watch ring before mapping — never return null from MapView children (native bridge crash)
+          const backgroundRings = rings.filter(r => Math.abs(r - effectiveRadius) >= interval * 0.1);
+
+          return backgroundRings.map((r, i) => {
             const showLabel = labelIndices.has(i);
             const labelTop = {
               latitude: anchorPosition.latitude + r * metresToLat,
@@ -259,21 +276,6 @@ export function RadarMap({
           );
         })()}
 
-        {/* Watch radius fill — stable key prevents reconciliation loss when ring count changes */}
-        {anchorPosition && !customZone && (
-          <Circle
-            key="watch-fill"
-            center={anchorPosition}
-            radius={effectiveRadius}
-            strokeColor="transparent"
-            strokeWidth={0}
-            fillColor={
-              alarmLevel === 'emergency' ? 'rgba(239,68,68,0.15)' :
-              alarmLevel === 'alert'     ? 'rgba(249,115,22,0.15)' :
-                                           'rgba(16,185,129,0.12)'
-            }
-          />
-        )}
 
         {/* Bearing line — dashed line from boat to anchor */}
         {anchorPosition && displayBoatPosition && !drawingMode && (
@@ -347,6 +349,7 @@ export function RadarMap({
         {/* Boat marker — simple GPS dot */}
         {displayBoatPosition && (
           <Marker
+            identifier="boat-marker"
             coordinate={{
               latitude: displayBoatPosition.latitude,
               longitude: displayBoatPosition.longitude,

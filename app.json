@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0a1628"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.holdfast.app",
@@ -22,8 +24,12 @@
         "UIBackgroundModes": [
           "location",
           "fetch",
+          "remote-notification",
+          "location",
+          "fetch",
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -42,7 +48,12 @@
         "WAKE_LOCK",
         "VIBRATE",
         "SCHEDULE_EXACT_ALARM",
-        "USE_EXACT_ALARM"
+        "USE_EXACT_ALARM",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "plugins": [
@@ -62,13 +73,21 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#f59e0b",
-          "sounds": ["./assets/sounds/alarm.mp3"]
+          "sounds": [
+            "./assets/sounds/alarm.mp3"
+          ]
         }
       ]
     ],
     "scheme": "holdfast",
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "71c3b7a9-d472-412c-92e0-75d290aa4905"
+      }
     }
   }
 }
