@@ -35,6 +35,7 @@ export function RadarMap({
   const [mapStyle, setMapStyle] = useState<'satellite' | 'standard' | 'chart'>('satellite');
   const [anchorLocked, setAnchorLocked] = useState(true);
   const [latitudeDelta, setLatitudeDelta] = useState(0.005);
+  const latDeltaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     anchorPosition,
@@ -165,7 +166,10 @@ export function RadarMap({
         rotateEnabled={!drawingMode}
         pitchEnabled={false}
         onPanDrag={() => setFollowBoat(false)}
-        onRegionChangeComplete={(r) => setLatitudeDelta(r.latitudeDelta)}
+        onRegionChangeComplete={(r) => {
+          if (latDeltaDebounceRef.current) clearTimeout(latDeltaDebounceRef.current);
+          latDeltaDebounceRef.current = setTimeout(() => setLatitudeDelta(r.latitudeDelta), 500);
+        }}
         onLongPress={(!drawingMode && anchorLocked) ? (e) => onLongPress?.(e.nativeEvent.coordinate) : undefined}
         onPress={(drawingMode || onMapPress) ? handleMapPress : undefined}
         initialRegion={{
@@ -372,7 +376,7 @@ export function RadarMap({
             }}
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={20}
-            tracksViewChanges={true}
+            tracksViewChanges={false}
           >
             <View style={[
               styles.boatDot,

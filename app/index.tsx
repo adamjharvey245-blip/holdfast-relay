@@ -613,13 +613,6 @@ export default function HomeScreen() {
             <Text style={[styles.toolLabel, activePanel === 'playback' && styles.toolLabelActive]}>HISTORY</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.toolBtn}
-            onPress={() => router.push('/remote')}
-          >
-            <Ionicons name="wifi-outline" size={20} color="#64748b" />
-            <Text style={styles.toolLabel}>REMOTE</Text>
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.toolBtn}

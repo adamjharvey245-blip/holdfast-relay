@@ -8,7 +8,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAnchorStore } from '@/store/anchorStore';
 import { useAlarmSystem } from '@/hooks/useAlarmSystem';
 import { useGpsTracker } from '@/hooks/useGpsTracker';
-import { relayClient, startRelayBroadcast } from '@/services/websocketRelay';
 import { ONBOARDING_KEY } from './onboarding';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -42,7 +41,7 @@ const errStyles = StyleSheet.create({
 });
 
 function AppInit() {
-  const { hydrateFromStorage, watchCode, boatPosition } = useAnchorStore();
+  const { hydrateFromStorage } = useAnchorStore();
   const router = useRouter();
 
   // Initialise alarm system (registers notification channels, requests permissions)
@@ -62,25 +61,7 @@ function AppInit() {
     })();
   }, []);
 
-  // Connect WebSocket relay when we have a code
-  useEffect(() => {
-    if (watchCode) {
-      relayClient.connect(watchCode);
-    } else {
-      relayClient.disconnect();
-    }
-    return () => relayClient.disconnect();
-  }, [watchCode]);
-
-  // Broadcast position/alarm updates to relay watchers every 5s
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (watchCode && boatPosition) {
-        startRelayBroadcast();
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [watchCode, boatPosition]);
+  // Remote watch disabled — relay server not yet configured
 
   return null;
 }
