@@ -35,7 +35,8 @@ export function RadarMap({
   const [mapStyle, setMapStyle] = useState<'satellite' | 'standard' | 'chart'>('satellite');
   const [anchorLocked, setAnchorLocked] = useState(true);
   const [latitudeDelta, setLatitudeDelta] = useState(0.005);
-  const latDeltaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     anchorPosition,
@@ -166,9 +167,15 @@ export function RadarMap({
         rotateEnabled={!drawingMode}
         pitchEnabled={false}
         onPanDrag={() => setFollowBoat(false)}
+        onRegionChange={() => {
+          setIsZooming(true);
+          if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+          zoomDebounceRef.current = setTimeout(() => setIsZooming(false), 400);
+        }}
         onRegionChangeComplete={(r) => {
-          if (latDeltaDebounceRef.current) clearTimeout(latDeltaDebounceRef.current);
-          latDeltaDebounceRef.current = setTimeout(() => setLatitudeDelta(r.latitudeDelta), 500);
+          if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
+          setLatitudeDelta(r.latitudeDelta);
+          setIsZooming(false);
         }}
         onLongPress={(!drawingMode && anchorLocked) ? (e) => onLongPress?.(e.nativeEvent.coordinate) : undefined}
         onPress={(drawingMode || onMapPress) ? handleMapPress : undefined}
@@ -217,8 +224,8 @@ export function RadarMap({
           />
         )}
 
-        {/* Watch radius fill */}
-        {anchorPosition && !customZone && (
+        {/* Watch radius fill — hidden while zooming to prevent native bridge nil crash */}
+        {anchorPosition && !customZone && !isZooming && (
           <Circle
             center={anchorPosition}
             radius={effectiveRadius}
@@ -232,8 +239,8 @@ export function RadarMap({
           />
         )}
 
-        {/* Background distance rings */}
-        {anchorPosition && !customZone && ringData.backgroundRings.map(r => (
+        {/* Background distance rings — hidden while zooming */}
+        {anchorPosition && !customZone && !isZooming && ringData.backgroundRings.map(r => (
           <Circle
             key={`ring-${r}`}
             center={anchorPosition}
@@ -244,8 +251,8 @@ export function RadarMap({
           />
         ))}
 
-        {/* Background ring labels */}
-        {anchorPosition && !customZone && ringData.labelMarkers.map(m => (
+        {/* Background ring labels — hidden while zooming */}
+        {anchorPosition && !customZone && !isZooming && ringData.labelMarkers.map(m => (
           <Marker
             key={m.key}
             identifier={m.key}
@@ -259,8 +266,8 @@ export function RadarMap({
           </Marker>
         ))}
 
-        {/* Watch boundary ring */}
-        {anchorPosition && !customZone && (
+        {/* Watch boundary ring — hidden while zooming */}
+        {anchorPosition && !customZone && !isZooming && (
           <Circle
             center={anchorPosition}
             radius={effectiveRadius}
@@ -270,8 +277,8 @@ export function RadarMap({
           />
         )}
 
-        {/* Watch ring labels — top and bottom */}
-        {anchorPosition && !customZone && (
+        {/* Watch ring labels — top and bottom, hidden while zooming */}
+        {anchorPosition && !customZone && !isZooming && (
           <Marker
             identifier="watch-label-top"
             coordinate={{ latitude: anchorPosition.latitude + effectiveRadius * METRES_TO_LAT, longitude: anchorPosition.longitude }}
@@ -283,7 +290,7 @@ export function RadarMap({
             </View>
           </Marker>
         )}
-        {anchorPosition && !customZone && (
+        {anchorPosition && !customZone && !isZooming && (
           <Marker
             identifier="watch-label-bot"
             coordinate={{ latitude: anchorPosition.latitude - effectiveRadius * METRES_TO_LAT, longitude: anchorPosition.longitude }}
@@ -356,13 +363,11 @@ export function RadarMap({
             draggable={!anchorLocked}
             onDragEnd={(e) => setAnchorPosition(e.nativeEvent.coordinate)}
           >
-            <View style={[styles.anchorContainer, !anchorLocked && styles.anchorContainerUnlocked]}>
-              <Image
-                source={require('../../assets/images/anchor-icon.png')}
-                style={styles.anchorIcon}
-                resizeMode="contain"
-              />
-            </View>
+            <Image
+              source={require('../../assets/images/anchor-icon.png')}
+              style={styles.anchorIcon}
+              resizeMode="contain"
+            />
           </Marker>
         )}
 
@@ -417,7 +422,7 @@ export function RadarMap({
           <Ionicons
             name={anchorLocked ? 'lock-closed-outline' : 'lock-open-outline'}
             size={18}
-            color={anchorLocked ? '#64748b' : '#10b981'}
+            color="#ffffff"
           />
         </TouchableOpacity>
       )}
@@ -459,23 +464,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
 
-  anchorContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(10,22,40,0.7)',
-    borderWidth: 2,
-    borderColor: '#C9A227',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  anchorContainerUnlocked: {
-    borderColor: '#10b981',
-    backgroundColor: 'rgba(16,185,129,0.2)',
-  },
   anchorIcon: {
-    width: 30,
-    height: 30,
+    width: 40,
+    height: 40,
   },
 
   drawPoint: {
@@ -555,7 +546,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   lockBtnUnlocked: {
-    backgroundColor: '#10b98122',
+    backgroundColor: '#10b981',
     borderColor: '#10b981',
   },
 
