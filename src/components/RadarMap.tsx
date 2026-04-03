@@ -348,21 +348,21 @@ export function RadarMap({
         {/* Anchor marker — custom icon image */}
         {anchorPosition && !drawingMode && (
           <Marker
+            identifier="anchor-marker"
             coordinate={anchorPosition}
             anchor={{ x: 0.5, y: 0.5 }}
             zIndex={10}
-            tracksViewChanges={true}
+            tracksViewChanges={false}
             draggable={!anchorLocked}
             onDragEnd={(e) => setAnchorPosition(e.nativeEvent.coordinate)}
           >
-            <Image
-              source={require('../../assets/images/anchor-icon.png')}
-              style={[
-                styles.anchorIcon,
-                !anchorLocked && styles.anchorIconUnlocked,
-              ]}
-              resizeMode="contain"
-            />
+            <View style={[styles.anchorContainer, !anchorLocked && styles.anchorContainerUnlocked]}>
+              <Image
+                source={require('../../assets/images/anchor-icon.png')}
+                style={styles.anchorIcon}
+                resizeMode="contain"
+              />
+            </View>
           </Marker>
         )}
 
@@ -459,13 +459,23 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
 
-  anchorIcon: {
-    width: 40,
-    height: 40,
+  anchorContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(10,22,40,0.7)',
+    borderWidth: 2,
+    borderColor: '#C9A227',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  anchorIconUnlocked: {
-    opacity: 0.7,
-    tintColor: '#10b981',
+  anchorContainerUnlocked: {
+    borderColor: '#10b981',
+    backgroundColor: 'rgba(16,185,129,0.2)',
+  },
+  anchorIcon: {
+    width: 30,
+    height: 30,
   },
 
   drawPoint: {
