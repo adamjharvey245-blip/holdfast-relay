@@ -35,8 +35,6 @@ export function RadarMap({
   const [mapStyle, setMapStyle] = useState<'satellite' | 'standard' | 'chart'>('satellite');
   const [anchorLocked, setAnchorLocked] = useState(true);
   const [latitudeDelta, setLatitudeDelta] = useState(0.005);
-  const [isZooming, setIsZooming] = useState(false);
-  const zoomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     anchorPosition,
@@ -83,59 +81,31 @@ export function RadarMap({
 
   const METRES_TO_LAT = 1 / 111320;
 
-  const ringData = useMemo(() => {
-    if (!anchorPosition || customZone) return { backgroundRings: [], watchLabel: '', labelMarkers: [] };
+  // ── Fixed rings — always exactly 4 rings at 25/50/75/150% of effectiveRadius ─
+  // Count NEVER changes so the native MapView children array is always stable.
+  // Only the radius/color props update, which is safe in the New Architecture bridge.
+  const RING_FRACTIONS = [0.25, 0.5, 0.75, 1.5];
 
-    const interval =
-      latitudeDelta < 0.0008 ? 1 :
-      latitudeDelta < 0.003  ? 5 :
-      latitudeDelta < 0.012  ? 10 : 20;
-
-    const allRings: number[] = [];
-    for (let r = interval; r <= effectiveRadius * 2; r += interval) {
-      allRings.push(r);
-    }
-
-    const watchIdx = allRings.reduce((best, r, i) =>
-      Math.abs(r - effectiveRadius) < Math.abs(allRings[best] - effectiveRadius) ? i : best, 0);
-    const start = Math.max(0, Math.min(watchIdx - 4, allRings.length - 10));
-    const rings = allRings.slice(start, start + 10);
-
-    const step = Math.max(1, Math.floor(rings.length / 5));
-    const labelIndices = new Set<number>();
-    for (let i = 0; i < rings.length && labelIndices.size < 6; i += step) {
-      labelIndices.add(i);
-    }
-
-    // Background rings — exclude the watch ring
-    const backgroundRings = rings.filter(r => Math.abs(r - effectiveRadius) >= interval * 0.1);
-
-    // Label markers for background rings
-    const labelMarkers: { key: string; coord: { latitude: number; longitude: number }; label: string; anchor: { x: number; y: number } }[] = [];
-    rings.forEach((r, i) => {
-      if (!labelIndices.has(i)) return;
-      if (Math.abs(r - effectiveRadius) < interval * 0.1) return; // watch ring has its own labels
-      const label = r >= 1000 ? `${(r / 1000).toFixed(1)}km` : `${r}m`;
-      labelMarkers.push({
-        key: `lbl-top-${r}`,
-        coord: { latitude: anchorPosition.latitude + r * METRES_TO_LAT, longitude: anchorPosition.longitude },
-        label,
-        anchor: { x: 0.5, y: 1 },
-      });
-      labelMarkers.push({
-        key: `lbl-bot-${r}`,
-        coord: { latitude: anchorPosition.latitude - r * METRES_TO_LAT, longitude: anchorPosition.longitude },
-        label,
-        anchor: { x: 0.5, y: 0 },
-      });
+  const ringProps = useMemo(() => {
+    const center = anchorPosition ?? { latitude: 0, longitude: 0 };
+    const fmt = (r: number) => r >= 1000 ? `${(r / 1000).toFixed(1)}km` : `${Math.round(r)}m`;
+    return RING_FRACTIONS.map(f => {
+      const r = effectiveRadius * f;
+      return {
+        radius: r,
+        label: fmt(r),
+        latTop: center.latitude + r * METRES_TO_LAT,
+        latBot: center.latitude - r * METRES_TO_LAT,
+        lng: center.longitude,
+      };
     });
+  }, [anchorPosition, effectiveRadius]);
 
-    const watchLabel = effectiveRadius >= 1000
-      ? `${(effectiveRadius / 1000).toFixed(1)}km`
-      : `${Math.round(effectiveRadius)}m`;
+  const watchLabel = effectiveRadius >= 1000
+    ? `${(effectiveRadius / 1000).toFixed(1)}km`
+    : `${Math.round(effectiveRadius)}m`;
 
-    return { backgroundRings, watchLabel, labelMarkers };
-  }, [anchorPosition, customZone, latitudeDelta, effectiveRadius]);
+  const anchorCenter = anchorPosition ?? { latitude: 0, longitude: 0 };
 
   // ── Watch radius ring colour ──────────────────────────────────────────────
 
@@ -167,16 +137,7 @@ export function RadarMap({
         rotateEnabled={!drawingMode}
         pitchEnabled={false}
         onPanDrag={() => setFollowBoat(false)}
-        onRegionChange={() => {
-          setIsZooming(true);
-          if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
-          zoomDebounceRef.current = setTimeout(() => setIsZooming(false), 400);
-        }}
-        onRegionChangeComplete={(r) => {
-          if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
-          setLatitudeDelta(r.latitudeDelta);
-          setIsZooming(false);
-        }}
+        onRegionChangeComplete={(r) => setLatitudeDelta(r.latitudeDelta)}
         onLongPress={(!drawingMode && anchorLocked) ? (e) => onLongPress?.(e.nativeEvent.coordinate) : undefined}
         onPress={(drawingMode || onMapPress) ? handleMapPress : undefined}
         initialRegion={{
@@ -205,117 +166,95 @@ export function RadarMap({
           </>
         )}
 
-        {/* Snail trail */}
-        {positionHistory.length > 1 && (
-          <Polyline
-            coordinates={positionHistory.map(p => ({ latitude: p.latitude, longitude: p.longitude }))}
-            strokeColor="#00d4ff"
-            strokeWidth={4}
-          />
-        )}
+        {/* Snail trail — always rendered, transparent when not enough points */}
+        <Polyline
+          coordinates={positionHistory.length > 1
+            ? positionHistory.map(p => ({ latitude: p.latitude, longitude: p.longitude }))
+            : [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.0001 }]}
+          strokeColor={positionHistory.length > 1 ? '#00d4ff' : 'transparent'}
+          strokeWidth={positionHistory.length > 1 ? 4 : 0}
+        />
 
-        {/* Saved custom zone polygon */}
-        {customZone && customZone.length >= 3 && !drawingMode && (
-          <Polygon
-            coordinates={customZone}
-            strokeColor={ringColor}
-            strokeWidth={2}
-            fillColor={ringColor + '14'}
-          />
-        )}
+        {/* Saved custom zone polygon — always rendered, transparent when inactive */}
+        <Polygon
+          coordinates={customZone && customZone.length >= 3 && !drawingMode
+            ? customZone
+            : [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.0001 }, { latitude: 0.0001, longitude: 0 }]}
+          strokeColor={customZone && customZone.length >= 3 && !drawingMode ? ringColor : 'transparent'}
+          strokeWidth={customZone && customZone.length >= 3 && !drawingMode ? 2 : 0}
+          fillColor={customZone && customZone.length >= 3 && !drawingMode ? ringColor + '14' : 'transparent'}
+        />
 
-        {/* Watch radius fill — hidden while zooming to prevent native bridge nil crash */}
-        {anchorPosition && !customZone && !isZooming && (
+        {/* Watch radius fill — always rendered, only props change (never add/remove) */}
+        <Circle
+          center={anchorCenter}
+          radius={anchorPosition && !customZone ? effectiveRadius : 1}
+          strokeColor="transparent"
+          strokeWidth={0}
+          fillColor={
+            !anchorPosition || customZone ? 'transparent' :
+            alarmLevel === 'emergency' ? 'rgba(239,68,68,0.15)' :
+            alarmLevel === 'alert'     ? 'rgba(249,115,22,0.15)' :
+                                         'rgba(16,185,129,0.12)'
+          }
+        />
+
+        {/* Watch boundary ring — always rendered */}
+        <Circle
+          center={anchorCenter}
+          radius={anchorPosition && !customZone ? effectiveRadius : 1}
+          strokeColor={anchorPosition && !customZone ? 'rgba(255,255,255,0.9)' : 'transparent'}
+          strokeWidth={2}
+          fillColor="transparent"
+        />
+
+        {/* Fixed 4 background rings at 25/50/75/150% — always rendered, count never changes */}
+        {ringProps.map((rp, i) => (
           <Circle
-            center={anchorPosition}
-            radius={effectiveRadius}
-            strokeColor="transparent"
-            strokeWidth={0}
-            fillColor={
-              alarmLevel === 'emergency' ? 'rgba(239,68,68,0.15)' :
-              alarmLevel === 'alert'     ? 'rgba(249,115,22,0.15)' :
-                                           'rgba(16,185,129,0.12)'
-            }
-          />
-        )}
-
-        {/* Background distance rings — hidden while zooming */}
-        {anchorPosition && !customZone && !isZooming && ringData.backgroundRings.map(r => (
-          <Circle
-            key={`ring-${r}`}
-            center={anchorPosition}
-            radius={r}
-            strokeColor="rgba(255,255,255,0.45)"
+            key={`fixed-ring-${i}`}
+            center={anchorCenter}
+            radius={anchorPosition && !customZone ? rp.radius : 1}
+            strokeColor={anchorPosition && !customZone ? 'rgba(255,255,255,0.4)' : 'transparent'}
             strokeWidth={1}
             fillColor="transparent"
           />
         ))}
 
-        {/* Background ring labels — hidden while zooming */}
-        {anchorPosition && !customZone && !isZooming && ringData.labelMarkers.map(m => (
-          <Marker
-            key={m.key}
-            identifier={m.key}
-            coordinate={m.coord}
-            anchor={m.anchor}
-            tracksViewChanges={false}
-          >
-            <View style={styles.ringLabel}>
-              <Text style={styles.ringLabelText}>{m.label}</Text>
-            </View>
-          </Marker>
-        ))}
-
-        {/* Watch boundary ring — hidden while zooming */}
-        {anchorPosition && !customZone && !isZooming && (
-          <Circle
-            center={anchorPosition}
-            radius={effectiveRadius}
-            strokeColor="rgba(255,255,255,0.9)"
-            strokeWidth={2}
-            fillColor="transparent"
-          />
-        )}
-
-        {/* Watch ring labels — top and bottom, hidden while zooming */}
-        {anchorPosition && !customZone && !isZooming && (
-          <Marker
-            identifier="watch-label-top"
-            coordinate={{ latitude: anchorPosition.latitude + effectiveRadius * METRES_TO_LAT, longitude: anchorPosition.longitude }}
-            anchor={{ x: 0.5, y: 1 }}
-            tracksViewChanges={false}
-          >
-            <View style={styles.ringLabel}>
-              <Text style={styles.ringLabelTextWatch}>{ringData.watchLabel}</Text>
-            </View>
-          </Marker>
-        )}
-        {anchorPosition && !customZone && !isZooming && (
-          <Marker
-            identifier="watch-label-bot"
-            coordinate={{ latitude: anchorPosition.latitude - effectiveRadius * METRES_TO_LAT, longitude: anchorPosition.longitude }}
-            anchor={{ x: 0.5, y: 0 }}
-            tracksViewChanges={false}
-          >
-            <View style={styles.ringLabel}>
-              <Text style={styles.ringLabelTextWatch}>{ringData.watchLabel}</Text>
-            </View>
-          </Marker>
-        )}
+        {/* Watch ring labels — always rendered, content empty when no anchor */}
+        <Marker
+          identifier="watch-label-top"
+          coordinate={{ latitude: anchorCenter.latitude + (anchorPosition ? effectiveRadius * METRES_TO_LAT : 0.0001), longitude: anchorCenter.longitude }}
+          anchor={{ x: 0.5, y: 1 }}
+          tracksViewChanges={false}
+        >
+          <View style={styles.ringLabel}>
+            <Text style={styles.ringLabelTextWatch}>{anchorPosition && !customZone ? watchLabel : ''}</Text>
+          </View>
+        </Marker>
+        <Marker
+          identifier="watch-label-bot"
+          coordinate={{ latitude: anchorCenter.latitude - (anchorPosition ? effectiveRadius * METRES_TO_LAT : 0.0001), longitude: anchorCenter.longitude }}
+          anchor={{ x: 0.5, y: 0 }}
+          tracksViewChanges={false}
+        >
+          <View style={styles.ringLabel}>
+            <Text style={styles.ringLabelTextWatch}>{anchorPosition && !customZone ? watchLabel : ''}</Text>
+          </View>
+        </Marker>
 
 
-        {/* Bearing line — dashed line from boat to anchor */}
-        {anchorPosition && displayBoatPosition && !drawingMode && (
-          <Polyline
-            coordinates={[
-              { latitude: displayBoatPosition.latitude, longitude: displayBoatPosition.longitude },
-              { latitude: anchorPosition.latitude, longitude: anchorPosition.longitude },
-            ]}
-            strokeColor="rgba(255,255,255,0.20)"
-            strokeWidth={1}
-            lineDashPattern={[8, 6]}
-          />
-        )}
+        {/* Bearing line — always rendered, transparent when no anchor/boat */}
+        <Polyline
+          coordinates={anchorPosition && displayBoatPosition && !drawingMode
+            ? [
+                { latitude: displayBoatPosition.latitude, longitude: displayBoatPosition.longitude },
+                { latitude: anchorPosition.latitude, longitude: anchorPosition.longitude },
+              ]
+            : [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.0001 }]}
+          strokeColor={anchorPosition && displayBoatPosition && !drawingMode ? 'rgba(255,255,255,0.20)' : 'transparent'}
+          strokeWidth={1}
+          lineDashPattern={[8, 6]}
+        />
 
         {/* Drawing mode preview */}
         {drawingMode && drawnPoints.length >= 2 && (
@@ -352,44 +291,40 @@ export function RadarMap({
           </Marker>
         ))}
 
-        {/* Anchor marker — custom icon image */}
-        {anchorPosition && !drawingMode && (
-          <Marker
-            identifier="anchor-marker"
-            coordinate={anchorPosition}
-            anchor={{ x: 0.5, y: 0.5 }}
-            zIndex={10}
-            tracksViewChanges={false}
-            draggable={!anchorLocked}
-            onDragEnd={(e) => setAnchorPosition(e.nativeEvent.coordinate)}
-          >
-            <Image
-              source={require('../../assets/images/anchor-icon.png')}
-              style={styles.anchorIcon}
-              resizeMode="contain"
-            />
-          </Marker>
-        )}
+        {/* Anchor marker — always rendered, invisible when no anchor or in drawing mode */}
+        <Marker
+          identifier="anchor-marker"
+          coordinate={anchorPosition ?? { latitude: 0, longitude: 0 }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          zIndex={10}
+          tracksViewChanges={false}
+          draggable={!anchorLocked && !!anchorPosition && !drawingMode}
+          onDragEnd={(e) => setAnchorPosition(e.nativeEvent.coordinate)}
+        >
+          <Image
+            source={require('../../assets/images/anchor-icon.png')}
+            style={[styles.anchorIcon, (!anchorPosition || drawingMode) && { opacity: 0 }]}
+            resizeMode="contain"
+          />
+        </Marker>
 
-        {/* Boat marker — simple GPS dot */}
-        {displayBoatPosition && (
-          <Marker
-            identifier="boat-marker"
-            coordinate={{
-              latitude: displayBoatPosition.latitude,
-              longitude: displayBoatPosition.longitude,
-            }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            zIndex={20}
-            tracksViewChanges={false}
-          >
-            <View style={[
-              styles.boatDot,
-              isDragging && !isPlayback && styles.boatDotDragging,
-              isPlayback && styles.boatDotPlayback,
-            ]} />
-          </Marker>
-        )}
+        {/* Boat marker — always rendered, invisible when no GPS fix */}
+        <Marker
+          identifier="boat-marker"
+          coordinate={displayBoatPosition
+            ? { latitude: displayBoatPosition.latitude, longitude: displayBoatPosition.longitude }
+            : { latitude: 0, longitude: 0 }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          zIndex={20}
+          tracksViewChanges={true}
+        >
+          <View style={[
+            styles.boatDot,
+            isDragging && !isPlayback && styles.boatDotDragging,
+            isPlayback && styles.boatDotPlayback,
+            !displayBoatPosition && { opacity: 0 },
+          ]} />
+        </Marker>
       </MapView>
 
       {/* Playback indicator */}
