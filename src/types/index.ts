@@ -13,6 +13,8 @@ export type AlarmLevel = 'silent' | 'alert' | 'emergency';
 
 export type GpsStatus = 'searching' | 'ok' | 'degraded' | 'lost';
 
+export type BatteryMode = 'precision' | 'standard';
+
 export interface AlarmThresholds {
   gpsLostSecs: number;
   alarmCooldownSecs: number;
@@ -59,6 +61,7 @@ export interface AnchorState {
   tideDataLat: number | null;
   tideDataLon: number | null;
   alarmsEnabled: boolean;
+  batteryMode: BatteryMode;
 }
 
 export interface RelayMessage {

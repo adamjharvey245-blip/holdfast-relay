@@ -32,6 +32,8 @@ export default function SettingsScreen() {
     setAlarmThresholds,
     alarmsEnabled,
     setAlarmsEnabled,
+    batteryMode,
+    setBatteryMode,
   } = useAnchorStore();
 
   const historyHours = positionHistory.length > 0
@@ -155,6 +157,39 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
+        </Section>
+
+        {/* GPS & BATTERY */}
+        <Section title="GPS & BATTERY">
+          <Text style={styles.hint}>
+            Precision mode uses all available sensors for the most stable GPS lock. Standard mode uses the GPS chip only — lower power, still high accuracy. Change only if your device is struggling with battery overnight.
+          </Text>
+          <View style={styles.modeRow}>
+            <TouchableOpacity
+              style={[styles.modeBtn, batteryMode === 'precision' && styles.modeBtnActive]}
+              onPress={() => setBatteryMode('precision')}
+            >
+              <Ionicons name="navigate" size={18} color={batteryMode === 'precision' ? '#0a1628' : '#475569'} />
+              <Text style={[styles.modeBtnTitle, batteryMode === 'precision' && styles.modeBtnTitleActive]}>Precision</Text>
+              <Text style={[styles.modeBtnSub, batteryMode === 'precision' && styles.modeBtnSubActive]}>GPS + sensors{'\n'}Updates every 3s / 10s</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeBtn, batteryMode === 'standard' && styles.modeBtnActive]}
+              onPress={() => setBatteryMode('standard')}
+            >
+              <Ionicons name="battery-half" size={18} color={batteryMode === 'standard' ? '#0a1628' : '#475569'} />
+              <Text style={[styles.modeBtnTitle, batteryMode === 'standard' && styles.modeBtnTitleActive]}>Standard</Text>
+              <Text style={[styles.modeBtnSub, batteryMode === 'standard' && styles.modeBtnSubActive]}>GPS only{'\n'}Updates every 5s / 15s</Text>
+            </TouchableOpacity>
+          </View>
+          {batteryMode === 'standard' && (
+            <View style={styles.modeWarning}>
+              <Ionicons name="warning-outline" size={14} color="#f97316" />
+              <Text style={styles.modeWarningText}>
+                Standard mode is only suitable for open anchorages with a watch radius above 30m.
+              </Text>
+            </View>
+          )}
         </Section>
 
         {/* WATCH RADIUS */}
@@ -586,6 +621,60 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   stepBtnText: { color: '#f1f5f9', fontSize: 18, lineHeight: 22 },
+
+  modeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#162d57',
+  },
+  modeBtn: {
+    flex: 1,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a6e',
+    backgroundColor: '#162d57',
+    padding: 12,
+    alignItems: 'center',
+    gap: 6,
+  },
+  modeBtnActive: {
+    backgroundColor: '#C9A227',
+    borderColor: '#C9A227',
+  },
+  modeBtnTitle: {
+    color: '#94a3b8',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  modeBtnTitleActive: { color: '#0a1628' },
+  modeBtnSub: {
+    color: '#475569',
+    fontSize: 10,
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  modeBtnSubActive: { color: '#0a1628aa' },
+  modeWarning: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    margin: 12,
+    marginTop: 0,
+    backgroundColor: '#f9731615',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#f9731630',
+  },
+  modeWarningText: {
+    color: '#f97316',
+    fontSize: 12,
+    lineHeight: 17,
+    flex: 1,
+  },
 
   toggleRow: {
     flexDirection: 'row',

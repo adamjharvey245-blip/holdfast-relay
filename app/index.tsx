@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated } from 'react-native';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -97,6 +98,41 @@ function RelativeAnchorPanel({
   const rotateBearing = (delta: number) =>
     onBearingChange(((bearing + delta) % 360 + 360) % 360);
 
+  // ── Compass ──────────────────────────────────────────────────────────────
+  const [compassActive, setCompassActive] = useState(false);
+  const [compassHeading, setCompassHeading] = useState<number | null>(null);
+  const headingSubRef = useRef<Location.LocationSubscription | null>(null);
+
+  const startCompass = async () => {
+    try {
+      headingSubRef.current = await Location.watchHeadingAsync((heading) => {
+        // Use true heading if available (>= 0), fall back to magnetic
+        const h = heading.trueHeading >= 0 ? heading.trueHeading : heading.magHeading;
+        const rounded = Math.round(h);
+        setCompassHeading(rounded);
+        onBearingChange(rounded);
+      });
+      setCompassActive(true);
+    } catch (e) {
+      console.warn('[Compass] Failed to start heading watch:', e);
+    }
+  };
+
+  const stopCompass = () => {
+    headingSubRef.current?.remove();
+    headingSubRef.current = null;
+    setCompassActive(false);
+    setCompassHeading(null);
+  };
+
+  // Stop compass when panel unmounts
+  useEffect(() => () => { stopCompass(); }, []);
+
+  const toggleCompass = () => {
+    if (compassActive) stopCompass();
+    else startCompass();
+  };
+
   return (
     <View style={rStyles.container}>
       <Text style={rStyles.heading}>RELATIVE POSITION</Text>
@@ -106,22 +142,43 @@ function RelativeAnchorPanel({
         <Text style={rStyles.summaryBearing}>{bearing}° — from your GPS position</Text>
       </View>
 
-      <Text style={rStyles.label}>BEARING</Text>
+      <View style={rStyles.labelRow}>
+        <Text style={rStyles.label}>BEARING</Text>
+        <TouchableOpacity
+          style={[rStyles.compassBtn, compassActive && rStyles.compassBtnActive]}
+          onPress={toggleCompass}
+        >
+          <Ionicons name="compass-outline" size={14} color={compassActive ? '#0a1628' : '#C9A227'} />
+          <Text style={[rStyles.compassBtnText, compassActive && rStyles.compassBtnTextActive]}>
+            {compassActive ? `LIVE ${compassHeading ?? '—'}°` : 'USE COMPASS'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {compassActive && (
+        <View style={rStyles.compassHint}>
+          <Ionicons name="information-circle-outline" size={13} color="#475569" />
+          <Text style={rStyles.compassHintText}>
+            Point your phone toward the anchor. Bearing updates live. Tap USE COMPASS again to lock.
+          </Text>
+        </View>
+      )}
+
       <View style={rStyles.row}>
-        <TouchableOpacity style={rStyles.btn} onPress={() => rotateBearing(-45)}>
+        <TouchableOpacity style={rStyles.btn} onPress={() => { stopCompass(); rotateBearing(-45); }}>
           <Text style={rStyles.btnText}>-45°</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={rStyles.btn} onPress={() => rotateBearing(-10)}>
+        <TouchableOpacity style={rStyles.btn} onPress={() => { stopCompass(); rotateBearing(-10); }}>
           <Text style={rStyles.btnText}>-10°</Text>
         </TouchableOpacity>
         <View style={rStyles.valueBox}>
           <Text style={rStyles.valueMain}>{cardinal}</Text>
           <Text style={rStyles.valueSub}>{bearing}°</Text>
         </View>
-        <TouchableOpacity style={rStyles.btn} onPress={() => rotateBearing(10)}>
+        <TouchableOpacity style={rStyles.btn} onPress={() => { stopCompass(); rotateBearing(10); }}>
           <Text style={rStyles.btnText}>+10°</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={rStyles.btn} onPress={() => rotateBearing(45)}>
+        <TouchableOpacity style={rStyles.btn} onPress={() => { stopCompass(); rotateBearing(45); }}>
           <Text style={rStyles.btnText}>+45°</Text>
         </TouchableOpacity>
       </View>
@@ -147,10 +204,10 @@ function RelativeAnchorPanel({
       </View>
 
       <View style={rStyles.actions}>
-        <TouchableOpacity style={rStyles.cancelBtn} onPress={onCancel}>
+        <TouchableOpacity style={rStyles.cancelBtn} onPress={() => { stopCompass(); onCancel(); }}>
           <Text style={rStyles.cancelText}>CANCEL</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={rStyles.dropBtn} onPress={onDrop}>
+        <TouchableOpacity style={rStyles.dropBtn} onPress={() => { stopCompass(); onDrop(); }}>
           <Text style={rStyles.dropText}>DROP ANCHOR HERE</Text>
         </TouchableOpacity>
       </View>
@@ -171,6 +228,20 @@ const rStyles = StyleSheet.create({
   summaryMain: { color: '#f1f5f9', fontSize: 22, fontWeight: '700' },
   summaryBearing: { color: '#64748b', fontSize: 12, marginTop: 2 },
   label: { color: '#475569', fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  compassBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderWidth: 1, borderColor: '#C9A22766', borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  compassBtnActive: { backgroundColor: '#C9A227', borderColor: '#C9A227' },
+  compassBtnText: { color: '#C9A227', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  compassBtnTextActive: { color: '#0a1628' },
+  compassHint: {
+    flexDirection: 'row', gap: 6, alignItems: 'flex-start',
+    backgroundColor: '#162d57', borderRadius: 8, padding: 8,
+  },
+  compassHintText: { color: '#475569', fontSize: 11, lineHeight: 16, flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btn: {
     width: 44, height: 44, borderRadius: 22,

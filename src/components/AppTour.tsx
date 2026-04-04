@@ -24,8 +24,8 @@ const TOUR_STEPS: TourStep[] = [
   {
     icon: 'anchor',
     iconColor: '#C9A227',
-    title: 'Set Your Anchor',
-    body: 'Long-press anywhere on the map to drop an anchor at that location. The anchor icon will appear where you set it. For precise placement, tap the anchor button at the bottom of the screen first — that switches to tap-to-place mode.',
+    title: 'Dropping the Anchor',
+    body: 'There are four ways to set your anchor position:\n\n1. Long-press on the map at the anchor\'s location\n\n2. Tap the anchor button (toolbar) to enter tap-to-place mode, then tap the map\n\n3. Drop at GPS — places the anchor at your current position\n\n4. Relative position — set a bearing (use the live compass to point your phone at the anchor) and a distance from your current GPS position. Useful when you can see the anchor from the boat.',
     position: 'center',
   },
   {

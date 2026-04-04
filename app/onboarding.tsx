@@ -431,6 +431,11 @@ function StepReady() {
             ? 'Android may suspend the app in the background. Go to Settings → Battery → HoldFast and set to "Unrestricted".'
             : 'iOS handles background location automatically once "Always" permission is granted.'}
         />
+        <Tip
+          number="4"
+          title="Keep the phone cool"
+          body="Running GPS at high precision generates heat. If the phone overheats, iOS will throttle or disable the GPS chip. Do not leave the phone in direct sunlight, sealed in a bag, or under a pillow while charging. A shaded, ventilated spot is best."
+        />
       </View>
 
       <View style={styles.warningCard}>
