@@ -9,6 +9,7 @@ import MapView, {
   UrlTile,
 } from 'react-native-maps';
 import { useAnchorStore } from '@/store/anchorStore';
+import { haversineDistance } from '@/utils/haversine';
 import type { MapRegion } from '@/types';
 
 interface RadarMapProps {
@@ -47,6 +48,7 @@ export function RadarMap({
     alarmLevel,
     selectedHistoryIndex,
     setAnchorPosition,
+    setWatchRadius,
     tideEnabled,
     anchorTideHeight,
     currentTideHeight,
@@ -107,6 +109,15 @@ export function RadarMap({
 
   const anchorCenter = anchorPosition ?? { latitude: 0, longitude: 0 };
 
+  // Radius handle — sits on the east edge of the watch ring when unlocked.
+  // Moving it drags the ring to resize the radius in real time.
+  const METRES_TO_LON = anchorPosition
+    ? 1 / (111320 * Math.cos(anchorPosition.latitude * Math.PI / 180))
+    : 0;
+  const radiusHandleCoord = anchorPosition && !anchorLocked && !customZone
+    ? { latitude: anchorCenter.latitude, longitude: anchorCenter.longitude + effectiveRadius * METRES_TO_LON }
+    : { latitude: 0, longitude: 0 };
+
   // ── Watch radius ring colour ──────────────────────────────────────────────
 
   const ringColor =
@@ -134,9 +145,10 @@ export function RadarMap({
         showsUserLocation={boatPosition === null}
         showsCompass={true}
         showsScale={true}
-        rotateEnabled={!drawingMode}
+        scrollEnabled={anchorLocked || !anchorPosition || drawingMode}
+        rotateEnabled={anchorLocked && !drawingMode}
         pitchEnabled={false}
-        onPanDrag={() => setFollowBoat(false)}
+        onPanDrag={() => { if (anchorLocked) setFollowBoat(false); }}
         onRegionChangeComplete={(r) => setLatitudeDelta(r.latitudeDelta)}
         onLongPress={(!drawingMode && anchorLocked) ? (e) => onLongPress?.(e.nativeEvent.coordinate) : undefined}
         onPress={(drawingMode || onMapPress) ? handleMapPress : undefined}
@@ -297,7 +309,7 @@ export function RadarMap({
           coordinate={anchorPosition ?? { latitude: 0, longitude: 0 }}
           anchor={{ x: 0.5, y: 0.5 }}
           zIndex={10}
-          tracksViewChanges={false}
+          tracksViewChanges={!anchorLocked}
           draggable={!anchorLocked && !!anchorPosition && !drawingMode}
           onDragEnd={(e) => setAnchorPosition(e.nativeEvent.coordinate)}
         >
@@ -306,6 +318,39 @@ export function RadarMap({
             style={[styles.anchorIcon, (!anchorPosition || drawingMode) && { opacity: 0 }]}
             resizeMode="contain"
           />
+        </Marker>
+
+        {/* Radius drag handle — always rendered, visible and draggable when unlocked */}
+        <Marker
+          identifier="radius-handle"
+          coordinate={radiusHandleCoord}
+          anchor={{ x: 0.5, y: 0.5 }}
+          zIndex={15}
+          tracksViewChanges={!anchorLocked}
+          draggable={!anchorLocked && !!anchorPosition && !customZone}
+          onDrag={(e) => {
+            const dist = haversineDistance(
+              anchorCenter.latitude, anchorCenter.longitude,
+              e.nativeEvent.coordinate.latitude,
+              e.nativeEvent.coordinate.longitude
+            );
+            setWatchRadius(Math.round(dist));
+          }}
+          onDragEnd={(e) => {
+            const dist = haversineDistance(
+              anchorCenter.latitude, anchorCenter.longitude,
+              e.nativeEvent.coordinate.latitude,
+              e.nativeEvent.coordinate.longitude
+            );
+            setWatchRadius(Math.round(dist));
+          }}
+        >
+          <View style={[
+            styles.radiusHandle,
+            (anchorLocked || !anchorPosition || !!customZone) && { opacity: 0 },
+          ]}>
+            <Ionicons name="resize-outline" size={12} color="#0a1628" />
+          </View>
         </Marker>
 
         {/* Boat marker — always rendered, invisible when no GPS fix */}
@@ -483,6 +528,17 @@ const styles = StyleSheet.create({
   lockBtnUnlocked: {
     backgroundColor: '#10b981',
     borderColor: '#10b981',
+  },
+
+  radiusHandle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#C9A227',
+    borderWidth: 2,
+    borderColor: '#0a1628',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   followBtn: {

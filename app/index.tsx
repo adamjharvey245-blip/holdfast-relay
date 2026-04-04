@@ -280,6 +280,26 @@ export default function HomeScreen() {
   const [drawnPoints, setDrawnPoints] = useState<{ latitude: number; longitude: number }[]>([]);
   const [nightMode, setNightMode] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [trackToast, setTrackToast] = useState<'paused' | 'recording' | null>(null);
+  const trackToastAnim = useRef(new Animated.Value(0)).current;
+  const trackToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showTrackToast = (state: 'paused' | 'recording') => {
+    if (trackToastTimer.current) clearTimeout(trackToastTimer.current);
+    setTrackToast(state);
+    trackToastAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(trackToastAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1800),
+      Animated.timing(trackToastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setTrackToast(null));
+  };
+
+  const handleTrackPause = () => {
+    const next = !isTrackingPaused;
+    setTrackingPaused(next);
+    showTrackToast(next ? 'paused' : 'recording');
+  };
 
   useEffect(() => {
     AsyncStorage.getItem(TOUR_KEY).then((done) => {
@@ -659,16 +679,19 @@ export default function HomeScreen() {
                 </>
               )}
             </TouchableOpacity>
-            {/* Track pause — small icon button */}
+            {/* Track pause — small icon + label button */}
             <TouchableOpacity
               style={[styles.trackPauseBtn, isTrackingPaused && styles.trackPauseBtnPaused]}
-              onPress={() => setTrackingPaused(!isTrackingPaused)}
+              onPress={handleTrackPause}
             >
               <Ionicons
                 name={isTrackingPaused ? 'play-outline' : 'pause-outline'}
-                size={20}
+                size={18}
                 color={isTrackingPaused ? '#ef4444' : '#475569'}
               />
+              <Text style={[styles.trackPauseLabel, isTrackingPaused && styles.trackPauseLabelPaused]}>
+                {isTrackingPaused ? 'PAUSED' : 'REC'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -723,6 +746,25 @@ export default function HomeScreen() {
         )}
       </View>}
 
+      {/* Track pause toast */}
+      {trackToast !== null && (
+        <Animated.View
+          style={[styles.trackToast, { opacity: trackToastAnim }]}
+          pointerEvents="none"
+        >
+          <Ionicons
+            name={trackToast === 'paused' ? 'pause-circle' : 'ellipse'}
+            size={16}
+            color={trackToast === 'paused' ? '#ef4444' : '#10b981'}
+          />
+          <Text style={styles.trackToastText}>
+            {trackToast === 'paused'
+              ? 'Track recording paused — GPS history not saved'
+              : 'Track recording resumed'}
+          </Text>
+        </Animated.View>
+      )}
+
       {/* App tour overlay — shown once after first launch */}
       <AppTour visible={showTour} onDone={handleTourDone} />
     </View>
@@ -756,9 +798,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#C9A22720', borderColor: '#C9A227',
   },
 
-  // Drop anchor button — top right
+  // Drop anchor button — top right, below map compass
   dropBtn: {
-    position: 'absolute', top: 12, right: 12,
+    position: 'absolute', top: 56, right: 12,
     backgroundColor: '#C9A227', borderRadius: 10,
     paddingVertical: 9, paddingHorizontal: 14,
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -767,7 +809,7 @@ const styles = StyleSheet.create({
 
   // Lift anchor — top right, replaces drop button when anchor is placed
   liftBtn: {
-    position: 'absolute', top: 12, right: 12,
+    position: 'absolute', top: 56, right: 12,
     backgroundColor: '#1a0505cc', borderRadius: 10,
     paddingVertical: 9, paddingHorizontal: 14,
     borderWidth: 1, borderColor: '#ef444477',
@@ -816,6 +858,33 @@ const styles = StyleSheet.create({
     borderColor: '#1e3a6e',
   },
   trackPauseBtnPaused: { borderColor: '#ef444466', backgroundColor: '#ef444411' },
+  trackPauseLabel: {
+    color: '#475569',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  trackPauseLabelPaused: { color: '#ef4444' },
+  trackToast: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#0f2040ee',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: '#1e3a6e',
+  },
+  trackToastText: {
+    color: '#f1f5f9',
+    fontSize: 12,
+    fontWeight: '600',
+  },
 
   // In-app alarm banner — large format for night legibility
   alarmBanner: {
