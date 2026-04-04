@@ -2,12 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RadarMap } from '@/components/RadarMap';
 import { TimeSlider } from '@/components/TimeSlider';
 import { RadiusControl } from '@/components/RadiusControl';
+import { AppTour } from '@/components/AppTour';
 import { useAnchorStore } from '@/store/anchorStore';
 import { useTideData } from '@/hooks/useTideData';
 import { offsetCoordinate, bearingDegrees } from '@/utils/haversine';
+import { TOUR_KEY } from './onboarding';
 
 type Panel = 'none' | 'radius' | 'playback' | 'relativeAnchor';
 
@@ -205,6 +208,18 @@ export default function HomeScreen() {
   const [isDrawingZone, setIsDrawingZone] = useState(false);
   const [drawnPoints, setDrawnPoints] = useState<{ latitude: number; longitude: number }[]>([]);
   const [nightMode, setNightMode] = useState(false);
+  const [showTour, setShowTour] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(TOUR_KEY).then((done) => {
+      if (!done) setShowTour(true);
+    });
+  }, []);
+
+  const handleTourDone = async () => {
+    await AsyncStorage.setItem(TOUR_KEY, 'true');
+    setShowTour(false);
+  };
 
   const {
     anchorPosition,
@@ -636,6 +651,9 @@ export default function HomeScreen() {
           />
         )}
       </View>}
+
+      {/* App tour overlay — shown once after first launch */}
+      <AppTour visible={showTour} onDone={handleTourDone} />
     </View>
   );
 }

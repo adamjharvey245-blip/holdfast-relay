@@ -20,6 +20,9 @@ export interface AlarmThresholds {
   alertSoundKey: string;         // key into ALARM_SOUNDS (default 'alarm')
   emergencySoundKey: string;     // key into ALARM_SOUNDS (default 'alarm')
   gpsLostSoundKey: string;       // key into ALARM_SOUNDS (default 'alarm')
+  alertEnabled: boolean;
+  emergencyEnabled: boolean;
+  gpsLostEnabled: boolean;
 }
 
 export interface TideDataPoint {

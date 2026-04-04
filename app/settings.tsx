@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   Switch,
   PanResponder,
+  Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TOUR_KEY } from './onboarding';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
@@ -85,7 +88,7 @@ export default function SettingsScreen() {
 
           <TouchableOpacity
             style={styles.resetBtn}
-            onPress={() => setAlarmThresholds({ gpsLostSecs: 60, alarmCooldownSecs: 120, emergencyThresholdPct: 120, alertSoundKey: 'alarm', emergencySoundKey: 'alarm', gpsLostSoundKey: 'alarm' })}
+            onPress={() => setAlarmThresholds({ gpsLostSecs: 60, alarmCooldownSecs: 120, emergencyThresholdPct: 120, alertSoundKey: 'alarm', emergencySoundKey: 'alarm', gpsLostSoundKey: 'alarm', alertEnabled: true, emergencyEnabled: true, gpsLostEnabled: true })}
           >
             <Text style={styles.resetBtnText}>RESET TO DEFAULTS</Text>
           </TouchableOpacity>
@@ -97,23 +100,29 @@ export default function SettingsScreen() {
             Choose a distinct sound for each alarm level. Tap the play button to preview.
           </Text>
           <SoundPicker
-            label="Alert sound"
+            label="Alert alarm"
             sublabel="Boundary reached"
             color="#f97316"
+            enabled={alarmThresholds.alertEnabled ?? true}
+            onToggle={(v) => setAlarmThresholds({ alertEnabled: v })}
             selectedKey={alarmThresholds.alertSoundKey ?? 'alarm'}
             onChange={(key) => setAlarmThresholds({ alertSoundKey: key })}
           />
           <SoundPicker
-            label="Emergency sound"
+            label="Emergency alarm"
             sublabel="Well past boundary"
             color="#ef4444"
+            enabled={alarmThresholds.emergencyEnabled ?? true}
+            onToggle={(v) => setAlarmThresholds({ emergencyEnabled: v })}
             selectedKey={alarmThresholds.emergencySoundKey ?? 'alarm'}
             onChange={(key) => setAlarmThresholds({ emergencySoundKey: key })}
           />
           <SoundPicker
-            label="GPS lost sound"
+            label="GPS lost alarm"
             sublabel="No fix detected"
             color="#a855f7"
+            enabled={alarmThresholds.gpsLostEnabled ?? true}
+            onToggle={(v) => setAlarmThresholds({ gpsLostEnabled: v })}
             selectedKey={alarmThresholds.gpsLostSoundKey ?? 'alarm'}
             onChange={(key) => setAlarmThresholds({ gpsLostSoundKey: key })}
           />
@@ -181,9 +190,18 @@ export default function SettingsScreen() {
         {/* ABOUT */}
         <Section title="ABOUT">
           <InfoRow label="App" value="HoldFast Anchor Alarm" />
-          <InfoRow label="Version" value="1.0.0 (build 6)" />
+          <InfoRow label="Version" value="1.0.0 (build 7)" />
           <InfoRow label="GPS formula" value="Haversine (great-circle)" />
           <InfoRow label="Background GPS" value="Expo Location task manager" />
+          <TouchableOpacity
+            style={styles.resetBtn}
+            onPress={async () => {
+              await AsyncStorage.removeItem(TOUR_KEY);
+              Alert.alert('Tour Reset', 'The guided tour will show on next app launch.');
+            }}
+          >
+            <Text style={styles.resetBtnText}>REPLAY APP TOUR</Text>
+          </TouchableOpacity>
         </Section>
 
       </ScrollView>
@@ -336,11 +354,13 @@ const sliderStyles = StyleSheet.create({
 // ─── Sound Picker ─────────────────────────────────────────────────────────────
 
 function SoundPicker({
-  label, sublabel, color, selectedKey, onChange,
+  label, sublabel, color, enabled, onToggle, selectedKey, onChange,
 }: {
   label: string;
   sublabel: string;
   color: string;
+  enabled: boolean;
+  onToggle: (v: boolean) => void;
   selectedKey: string;
   onChange: (key: string) => void;
 }) {
@@ -386,53 +406,70 @@ function SoundPicker({
   };
 
   return (
-    <View style={soundStyles.row}>
-      <View style={soundStyles.labelCol}>
-        <Text style={soundStyles.label}>{label}</Text>
-        <Text style={soundStyles.sublabel}>{sublabel}</Text>
+    <View style={soundStyles.outerRow}>
+      {/* Top row: label + toggle */}
+      <View style={soundStyles.topRow}>
+        <View style={soundStyles.labelCol}>
+          <Text style={[soundStyles.label, !enabled && soundStyles.labelDisabled]}>{label}</Text>
+          <Text style={soundStyles.sublabel}>{sublabel}</Text>
+        </View>
+        <Switch
+          value={enabled}
+          onValueChange={onToggle}
+          trackColor={{ false: '#1e3a6e', true: color + 'aa' }}
+          thumbColor={enabled ? color : '#475569'}
+        />
       </View>
-      <View style={soundStyles.controls}>
-        <TouchableOpacity style={soundStyles.arrowBtn} onPress={prev}>
-          <Ionicons name="chevron-back" size={18} color="#94a3b8" />
-        </TouchableOpacity>
-        <Text style={[soundStyles.soundName, { color }]}>{current.label}</Text>
-        <TouchableOpacity style={soundStyles.arrowBtn} onPress={next}>
-          <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[soundStyles.previewBtn, previewing && soundStyles.previewBtnActive]}
-          onPress={preview}
-          disabled={previewing}
-        >
-          <Ionicons
-            name={previewing ? 'volume-high' : 'play-circle-outline'}
-            size={22}
-            color={previewing ? color : '#64748b'}
-          />
-        </TouchableOpacity>
-      </View>
+      {/* Sound picker row — dimmed when disabled */}
+      {enabled && (
+        <View style={soundStyles.controls}>
+          <TouchableOpacity style={soundStyles.arrowBtn} onPress={prev}>
+            <Ionicons name="chevron-back" size={18} color="#94a3b8" />
+          </TouchableOpacity>
+          <Text style={[soundStyles.soundName, { color }]}>{current.label}</Text>
+          <TouchableOpacity style={soundStyles.arrowBtn} onPress={next}>
+            <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[soundStyles.previewBtn, previewing && soundStyles.previewBtnActive]}
+            onPress={preview}
+            disabled={previewing}
+          >
+            <Ionicons
+              name={previewing ? 'volume-high' : 'play-circle-outline'}
+              size={22}
+              color={previewing ? color : '#64748b'}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
 
 const soundStyles = StyleSheet.create({
-  row: {
+  outerRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#162d57',
+    gap: 10,
+  },
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#162d57',
     gap: 8,
   },
   labelCol: { flex: 1 },
   label: { color: '#94a3b8', fontSize: 13 },
+  labelDisabled: { color: '#334155' },
   sublabel: { color: '#475569', fontSize: 11, marginTop: 2 },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingLeft: 2,
   },
   arrowBtn: {
     width: 32, height: 32, borderRadius: 16,

@@ -333,7 +333,7 @@ export function useAlarmSystem() {
 
     switch (alarmLevel) {
       case 'alert':
-        if (!dragAlarmCancelled) {
+        if (!dragAlarmCancelled && (state.alarmThresholds.alertEnabled ?? true)) {
           fireNotification(
             '⚠️ ANCHOR DRAG ALERT',
             `Boat has reached the ${watchRadius}m boundary (${dist}m from anchor).`,
@@ -346,7 +346,7 @@ export function useAlarmSystem() {
 
       case 'emergency':
         if (gpsStatus === 'lost') {
-          if (!gpsAlarmCancelled) {
+          if (!gpsAlarmCancelled && (state.alarmThresholds.gpsLostEnabled ?? true)) {
             fireNotification(
               '🔴 GPS SIGNAL LOST',
               'No GPS fix. Anchor position unknown — check immediately!',
@@ -356,7 +356,7 @@ export function useAlarmSystem() {
             startAlarm('gps_lost', VIBRATE_EMERGENCY, 2000);
           }
         } else {
-          if (!dragAlarmCancelled) {
+          if (!dragAlarmCancelled && (state.alarmThresholds.emergencyEnabled ?? true)) {
             fireNotification(
               '🚨 ANCHOR DRAGGING — EMERGENCY',
               `Boat is ${dist}m from anchor — ${dist - watchRadius}m past boundary. IMMEDIATE ACTION REQUIRED!`,

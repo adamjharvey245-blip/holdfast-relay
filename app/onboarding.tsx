@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ScrollView,
   Image,
   Platform,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,14 +17,16 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const ONBOARDING_KEY = 'holdfast_onboarding_done';
+export const TOUR_KEY = 'holdfast_tour_done';
 
-type Step = 0 | 1 | 2 | 3;
-
-const STEPS: Step[] = [0, 1, 2, 3];
+type Step = 0 | 1 | 2 | 3 | 4;
+const STEPS: Step[] = [0, 1, 2, 3, 4];
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const [step, setStep] = useState<Step>(0);
+  const [tosAccepted, setTosAccepted] = useState(false);
+  const [tosScrolled, setTosScrolled] = useState(false);
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
   const [notifGranted, setNotifGranted] = useState<boolean | null>(null);
 
@@ -62,13 +66,14 @@ export default function OnboardingScreen() {
   };
 
   const canAdvance = () => {
-    if (step === 1) return locationGranted !== null;
-    if (step === 2) return notifGranted !== null;
+    if (step === 1) return tosAccepted;
+    if (step === 2) return locationGranted !== null;
+    if (step === 3) return notifGranted !== null;
     return true;
   };
 
   const advance = () => {
-    if (step < 3) setStep((step + 1) as Step);
+    if (step < 4) setStep((step + 1) as Step);
     else handleFinish();
   };
 
@@ -91,12 +96,20 @@ export default function OnboardingScreen() {
       >
         {step === 0 && <StepWelcome />}
         {step === 1 && (
-          <StepLocation granted={locationGranted} onRequest={handleRequestLocation} />
+          <StepToS
+            accepted={tosAccepted}
+            scrolled={tosScrolled}
+            onScrolled={() => setTosScrolled(true)}
+            onAccept={() => setTosAccepted(true)}
+          />
         )}
         {step === 2 && (
+          <StepLocation granted={locationGranted} onRequest={handleRequestLocation} />
+        )}
+        {step === 3 && (
           <StepNotifications granted={notifGranted} onRequest={handleRequestNotifications} />
         )}
-        {step === 3 && <StepReady />}
+        {step === 4 && <StepReady />}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -106,12 +119,12 @@ export default function OnboardingScreen() {
           disabled={!canAdvance()}
         >
           <Text style={styles.nextBtnText}>
-            {step === 3 ? 'START WATCHING' : 'CONTINUE'}
+            {step === 4 ? 'START WATCHING' : 'CONTINUE'}
           </Text>
           <Ionicons name="arrow-forward" size={16} color="#0a1628" />
         </TouchableOpacity>
 
-        {step < 3 && step > 0 && (
+        {step < 4 && step > 1 && (
           <TouchableOpacity style={styles.skipBtn} onPress={advance}>
             <Text style={styles.skipBtnText}>SKIP FOR NOW</Text>
           </TouchableOpacity>
@@ -158,7 +171,124 @@ function StepWelcome() {
   );
 }
 
-// ─── Step 1: Location ─────────────────────────────────────────────────────────
+// ─── Step 1: Terms of Service ─────────────────────────────────────────────────
+
+function StepToS({
+  accepted,
+  scrolled,
+  onScrolled,
+  onAccept,
+}: {
+  accepted: boolean;
+  scrolled: boolean;
+  onScrolled: () => void;
+  onAccept: () => void;
+}) {
+  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (contentOffset.y + layoutMeasurement.height >= contentSize.height - 40) {
+      onScrolled();
+    }
+  };
+
+  return (
+    <View style={styles.stepContent}>
+      <View style={styles.iconCircle}>
+        <Ionicons name="document-text-outline" size={36} color="#C9A227" />
+      </View>
+
+      <Text style={styles.stepTitle}>Terms of Service</Text>
+      <Text style={styles.stepBody}>
+        Please read the following carefully before using HoldFast. You must scroll to the bottom and accept to continue.
+      </Text>
+
+      <ScrollView
+        style={tosStyles.scroll}
+        onScroll={handleScroll}
+        scrollEventThrottle={100}
+        showsVerticalScrollIndicator={true}
+        nestedScrollEnabled={true}
+      >
+        <Text style={tosStyles.sectionHead}>1. Supplementary Tool Only</Text>
+        <Text style={tosStyles.body}>
+          HoldFast is designed as a supplementary aid to seamanship. It does not replace proper anchor watches, professional navigation equipment, or the judgement of a competent mariner. You must maintain an appropriate anchor watch by all available means at all times.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>2. No Warranty</Text>
+        <Text style={tosStyles.body}>
+          HoldFast is provided "as is" without any warranty of accuracy, reliability, or fitness for a particular purpose. GPS accuracy can vary significantly depending on device hardware, satellite availability, atmospheric conditions, and local obstructions. Device sleep states, background app restrictions, low battery, and loss of connectivity can all prevent or delay alarms. You must not rely solely on HoldFast for vessel safety.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>3. Assumption of Risk</Text>
+        <Text style={tosStyles.body}>
+          By using HoldFast you acknowledge and accept that all digital alarm systems can fail. You assume full responsibility for your vessel's safety and accept all risks associated with anchoring, including but not limited to anchor drag, collision, grounding, and property damage or personal injury arising therefrom.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>4. Limitation of Liability</Text>
+        <Text style={tosStyles.body}>
+          To the maximum extent permitted by applicable law, the developer of HoldFast shall not be liable for any direct, indirect, incidental, special, consequential, or punitive damages arising from your use of the app, including any loss or damage to your vessel, property, or injury to persons. Where liability cannot be excluded by law, it is limited to the amount you paid for the application (which may be zero).
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>5. Indemnification</Text>
+        <Text style={tosStyles.body}>
+          You agree to indemnify, defend, and hold harmless the developer of HoldFast and any associated parties from and against any claims, losses, damages, liabilities, costs, and expenses (including legal fees) arising from your use of the app or any breach of these terms.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>6. Known Failure Conditions</Text>
+        <Text style={tosStyles.body}>
+          You acknowledge that the following conditions may prevent alarms from firing:{'\n\n'}
+          • Device battery depletion{'\n'}
+          • iOS or Android background app suspension{'\n'}
+          • Loss of GPS signal (tunnels, below deck, urban canyons){'\n'}
+          • Device in low-power or aeroplane mode{'\n'}
+          • Do Not Disturb or Focus mode active{'\n'}
+          • App force-closed by the user or operating system{'\n\n'}
+          You are responsible for ensuring your device remains powered, connected, and configured to allow HoldFast to operate.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>7. Privacy</Text>
+        <Text style={tosStyles.body}>
+          HoldFast collects GPS location data solely on your device to calculate anchor position and distance. No location data is transmitted to any server unless you explicitly enable the Remote Watch feature, in which case your position is relayed temporarily to a server for the purpose of sharing with authorised watchers. No location data is stored by the developer, sold, or shared with third parties. You may view the full Privacy Policy in Settings.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>8. Governing Law</Text>
+        <Text style={tosStyles.body}>
+          These terms are governed by and construed in accordance with the laws of New South Wales, Australia. Any dispute arising under these terms shall be subject to the exclusive jurisdiction of the courts of New South Wales.
+        </Text>
+
+        <Text style={tosStyles.sectionHead}>9. Changes to These Terms</Text>
+        <Text style={tosStyles.body}>
+          These terms may be updated from time to time. Continued use of HoldFast after any update constitutes acceptance of the revised terms.
+        </Text>
+
+        <View style={tosStyles.endSpacer} />
+      </ScrollView>
+
+      {scrolled && !accepted && (
+        <TouchableOpacity style={tosStyles.acceptBtn} onPress={onAccept}>
+          <Ionicons name="checkmark-circle-outline" size={20} color="#0a1628" />
+          <Text style={tosStyles.acceptBtnText}>I HAVE READ AND AGREE TO THE TERMS</Text>
+        </TouchableOpacity>
+      )}
+
+      {accepted && (
+        <View style={styles.grantedBadge}>
+          <Ionicons name="checkmark-circle" size={18} color="#10b981" />
+          <Text style={styles.grantedText}>Terms accepted</Text>
+        </View>
+      )}
+
+      {!scrolled && (
+        <View style={tosStyles.scrollHint}>
+          <Ionicons name="arrow-down-outline" size={14} color="#475569" />
+          <Text style={tosStyles.scrollHintText}>Scroll to read all terms before accepting</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─── Step 2: Location ─────────────────────────────────────────────────────────
 
 function StepLocation({ granted, onRequest }: { granted: boolean | null; onRequest: () => void }) {
   return (
@@ -216,7 +346,7 @@ function StepLocation({ granted, onRequest }: { granted: boolean | null; onReque
   );
 }
 
-// ─── Step 2: Notifications ────────────────────────────────────────────────────
+// ─── Step 3: Notifications ────────────────────────────────────────────────────
 
 function StepNotifications({ granted, onRequest }: { granted: boolean | null; onRequest: () => void }) {
   return (
@@ -269,7 +399,7 @@ function StepNotifications({ granted, onRequest }: { granted: boolean | null; on
   );
 }
 
-// ─── Step 3: Ready ────────────────────────────────────────────────────────────
+// ─── Step 4: Ready ────────────────────────────────────────────────────────────
 
 function StepReady() {
   return (
@@ -302,6 +432,13 @@ function StepReady() {
             : 'iOS handles background location automatically once "Always" permission is granted.'}
         />
       </View>
+
+      <View style={styles.warningCard}>
+        <Ionicons name="warning-outline" size={16} color="#C9A227" />
+        <Text style={styles.warningText}>
+          A guided tour of the app will launch automatically on first open. You can replay it from Settings at any time.
+        </Text>
+      </View>
     </View>
   );
 }
@@ -332,6 +469,57 @@ function Tip({ number, title, body }: { number: string; title: string; body: str
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
+const tosStyles = StyleSheet.create({
+  scroll: {
+    maxHeight: 320,
+    backgroundColor: '#04080f',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1e3a6e',
+    padding: 14,
+  },
+  sectionHead: {
+    color: '#C9A227',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  body: {
+    color: '#64748b',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  endSpacer: { height: 20 },
+  acceptBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#C9A227',
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  acceptBtnText: {
+    color: '#0a1628',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  scrollHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  scrollHintText: {
+    color: '#475569',
+    fontSize: 11,
+  },
+});
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#0a1628' },

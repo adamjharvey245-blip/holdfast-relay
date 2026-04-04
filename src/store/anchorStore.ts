@@ -21,6 +21,9 @@ const DEFAULT_THRESHOLDS: AlarmThresholds = {
   alertSoundKey: 'alarm',
   emergencySoundKey: 'alarm',
   gpsLostSoundKey: 'alarm',
+  alertEnabled: true,
+  emergencyEnabled: true,
+  gpsLostEnabled: true,
 };
 
 function computeEffectiveRadius(
@@ -349,6 +352,9 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
           alertSoundKey: (saved_thresholds as AlarmThresholds).alertSoundKey ?? DEFAULT_THRESHOLDS.alertSoundKey,
           emergencySoundKey: (saved_thresholds as AlarmThresholds).emergencySoundKey ?? DEFAULT_THRESHOLDS.emergencySoundKey,
           gpsLostSoundKey: (saved_thresholds as AlarmThresholds).gpsLostSoundKey ?? DEFAULT_THRESHOLDS.gpsLostSoundKey,
+          alertEnabled: (saved_thresholds as AlarmThresholds).alertEnabled ?? true,
+          emergencyEnabled: (saved_thresholds as AlarmThresholds).emergencyEnabled ?? true,
+          gpsLostEnabled: (saved_thresholds as AlarmThresholds).gpsLostEnabled ?? true,
         },
       });
     } catch (e) {
