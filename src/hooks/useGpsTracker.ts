@@ -2,10 +2,31 @@ import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { useAnchorStore } from '@/store/anchorStore';
-import { useAnchorLogic } from './useAnchorLogic';
 import type { TimestampedCoordinate } from '@/types';
 
 export const BACKGROUND_LOCATION_TASK = 'HOLDFAST_BG_LOCATION';
+
+// ── Module-level GPS lost timer ───────────────────────────────────────────────
+// Must live at module scope (not inside a hook) so the background task can
+// reset it when a fix arrives while the screen is locked.
+
+let gpsLostTimer: ReturnType<typeof setTimeout> | null = null;
+
+function resetGpsLostTimer() {
+  if (gpsLostTimer) clearTimeout(gpsLostTimer);
+  const timeoutMs = (useAnchorStore.getState().alarmThresholds?.gpsLostSecs ?? 60) * 1000;
+  gpsLostTimer = setTimeout(() => {
+    const state = useAnchorStore.getState();
+    if (state.gpsStatus !== 'lost') {
+      state.setGpsStatus('lost');
+      if (state.isWatchActive) {
+        state.setAlarmLevel('emergency');
+      }
+    }
+  }, timeoutMs);
+}
+
+// ── Background task — defined at module level (required by expo-task-manager) ─
 
 TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
   if (error) { console.warn('[BG Location]', error.message); return; }
@@ -13,6 +34,8 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
     const { locations } = data as { locations: Location.LocationObject[] };
     const latest = locations[locations.length - 1];
     if (!latest) return;
+    // Reset the GPS lost timer — this is the critical fix for screen-locked dropouts
+    resetGpsLostTimer();
     useAnchorStore.getState().updateBoatPosition({
       latitude: latest.coords.latitude,
       longitude: latest.coords.longitude,
@@ -25,7 +48,6 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
 
 export function useGpsTracker() {
   const { updateBoatPosition, setGpsStatus } = useAnchorStore();
-  const { processNewPosition } = useAnchorLogic();
   const fgSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
 
   const startTracking = async () => {
@@ -71,8 +93,8 @@ export function useGpsTracker() {
             accuracy: location.coords.accuracy ?? undefined,
             speed: location.coords.speed ?? undefined,
           };
+          resetGpsLostTimer();
           updateBoatPosition(coord);
-          processNewPosition(coord);
         }
       );
     } catch (err) {
@@ -92,7 +114,7 @@ export function useGpsTracker() {
           await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
             accuracy: Location.Accuracy.BestForNavigation,
             timeInterval: 10_000,
-            distanceInterval: 5,
+            distanceInterval: 0,
             foregroundService: {
               notificationTitle: 'HoldFast is watching',
               notificationBody: 'Monitoring your anchor position',
@@ -112,6 +134,10 @@ export function useGpsTracker() {
   const stopTracking = async () => {
     fgSubscriptionRef.current?.remove();
     fgSubscriptionRef.current = null;
+    if (gpsLostTimer) {
+      clearTimeout(gpsLostTimer);
+      gpsLostTimer = null;
+    }
     try {
       const isRunning = await Location.hasStartedLocationUpdatesAsync(
         BACKGROUND_LOCATION_TASK

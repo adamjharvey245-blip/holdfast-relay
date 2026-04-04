@@ -63,6 +63,7 @@ export function useAlarmSystem() {
     draggingCancelledAt,
     alarmReFireTick,
     alarmThresholds,
+    alarmsEnabled,
   } = useAnchorStore();
 
   const prevAlarmLevel = useRef<AlarmLevel>('silent');
@@ -229,7 +230,7 @@ export function useAlarmSystem() {
       content: {
         title,
         body,
-        sound: true,
+        sound: 'alarm.mp3',
         priority: Notifications.AndroidNotificationPriority.MAX,
         ...(Platform.OS === 'ios' && critical
           ? { interruptionLevel: 'critical' }
@@ -310,8 +311,13 @@ export function useAlarmSystem() {
     // Read fresh state at fire time
     const state = useAnchorStore.getState();
 
-    // Safety guard — never fire alarm if watch has been disabled
+    // Safety guards — never fire alarm if watch disabled or alarms muted
     if (!state.isWatchActive && alarmLevel !== 'silent') {
+      stopAlarm();
+      dismissActive();
+      return;
+    }
+    if (!state.alarmsEnabled) {
       stopAlarm();
       dismissActive();
       return;
@@ -367,7 +373,7 @@ export function useAlarmSystem() {
         stopAlarm();
         break;
     }
-  }, [alarmLevel, gpsStatus, alarmReFireTick]);
+  }, [alarmLevel, gpsStatus, alarmReFireTick, alarmsEnabled]);
 
   return { dismissActive };
 }

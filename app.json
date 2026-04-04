@@ -23,6 +23,7 @@
         "NSLocationWhenInUseUsageDescription": "HoldFast uses GPS to track boat position relative to anchor.",
         "UIBackgroundModes": [
           "location",
+          "audio",
           "fetch",
           "remote-notification"
         ],

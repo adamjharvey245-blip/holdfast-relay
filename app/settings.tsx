@@ -5,6 +5,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Switch,
   PanResponder,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -26,6 +27,8 @@ export default function SettingsScreen() {
     positionHistory,
     alarmThresholds,
     setAlarmThresholds,
+    alarmsEnabled,
+    setAlarmsEnabled,
   } = useAnchorStore();
 
   const historyHours = positionHistory.length > 0
@@ -45,6 +48,20 @@ export default function SettingsScreen() {
 
         {/* ALARM SETTINGS */}
         <Section title="ALARM SETTINGS">
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLeft}>
+              <Text style={styles.rowLabel}>Alarms enabled</Text>
+              <Text style={styles.toggleSublabel}>
+                {alarmsEnabled ? 'Sound and vibration active' : 'All alarms silenced'}
+              </Text>
+            </View>
+            <Switch
+              value={alarmsEnabled}
+              onValueChange={setAlarmsEnabled}
+              trackColor={{ false: '#1e3a6e', true: '#10b981' }}
+              thumbColor="#ffffff"
+            />
+          </View>
           <Text style={styles.hint}>
             Configure when alarms fire and how long to silence them.
           </Text>
@@ -164,7 +181,7 @@ export default function SettingsScreen() {
         {/* ABOUT */}
         <Section title="ABOUT">
           <InfoRow label="App" value="HoldFast Anchor Alarm" />
-          <InfoRow label="Version" value="1.0.0 (build 5)" />
+          <InfoRow label="Version" value="1.0.0 (build 6)" />
           <InfoRow label="GPS formula" value="Haversine (great-circle)" />
           <InfoRow label="Background GPS" value="Expo Location task manager" />
         </Section>
@@ -532,6 +549,18 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   stepBtnText: { color: '#f1f5f9', fontSize: 18, lineHeight: 22 },
+
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#162d57',
+  },
+  toggleLeft: { flex: 1 },
+  toggleSublabel: { color: '#475569', fontSize: 11, marginTop: 2 },
 
   resetBtn: {
     margin: 12, paddingVertical: 12, borderRadius: 8,

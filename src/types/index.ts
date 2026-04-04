@@ -55,6 +55,7 @@ export interface AnchorState {
   tideDataFetchedAt: number | null;
   tideDataLat: number | null;
   tideDataLon: number | null;
+  alarmsEnabled: boolean;
 }
 
 export interface RelayMessage {

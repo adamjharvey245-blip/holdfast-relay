@@ -80,6 +80,7 @@ interface AnchorActions {
   hydrateFromStorage: () => Promise<void>;
   persistToStorage: () => Promise<void>;
   generateWatchCode: () => void;
+  setAlarmsEnabled: (enabled: boolean) => void;
   setTideEnabled: (enabled: boolean) => void;
   setTideAutoMode: (auto: boolean) => void;
   setAnchorTideHeight: (height: number) => void;
@@ -117,6 +118,7 @@ const initialState: AnchorState = {
   tideDataFetchedAt: null,
   tideDataLat: null,
   tideDataLon: null,
+  alarmsEnabled: true,
 };
 
 export const useAnchorStore = create<AnchorStore>((set, get) => ({
@@ -276,6 +278,11 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
     set({ watchCode: Math.floor(1000 + Math.random() * 9000).toString() });
   },
 
+  setAlarmsEnabled: (enabled) => {
+    set({ alarmsEnabled: enabled });
+    get().persistToStorage();
+  },
+
   setTideEnabled: (enabled) => {
     set({ tideEnabled: enabled });
     const state = get();
@@ -334,6 +341,7 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
         tideAutoMode: (saved as any).tideAutoMode ?? true,
         anchorTideHeight: (saved as any).anchorTideHeight ?? 0,
         currentTideHeight: (saved as any).currentTideHeight ?? 0,
+        alarmsEnabled: (saved as any).alarmsEnabled ?? true,
         alarmThresholds: {
           gpsLostSecs: (saved_thresholds as AlarmThresholds).gpsLostSecs ?? DEFAULT_THRESHOLDS.gpsLostSecs,
           alarmCooldownSecs: (saved_thresholds as AlarmThresholds).alarmCooldownSecs ?? DEFAULT_THRESHOLDS.alarmCooldownSecs,
@@ -349,11 +357,11 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   },
 
   persistToStorage: async () => {
-    const { anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight } = get();
+    const { anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight, alarmsEnabled } = get();
     try {
       await AsyncStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight })
+        JSON.stringify({ anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight, alarmsEnabled })
       );
     } catch (e) {
       console.error('[HoldFast] Failed to persist to storage:', e);
