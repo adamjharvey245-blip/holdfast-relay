@@ -537,7 +537,7 @@ export default function HomeScreen() {
                 onPress={() => { setShowDropMenu(false); setTapToPlace(true); }}
               >
                 <Text style={styles.dropOptionTitle}>CHOOSE ON MAP</Text>
-                <Text style={styles.dropOptionSub}>Tap the map to place the anchor point</Text>
+                <Text style={styles.dropOptionSub}>Press and hold the map to place the anchor</Text>
               </TouchableOpacity>
             </View>
           </View>
