@@ -3,171 +3,288 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AnchorSimple — Remote Watch</title>
+  <title>HoldFast — Remote Watch</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy:  #0C1B2C;
+      --panel: #0f2040;
+      --border:#1e3a6e;
+      --gold:  #C9A227;
+      --green: #10b981;
+      --red:   #ef4444;
+      --muted: #475569;
+      --dim:   #334155;
+      --text:  #94a3b8;
+    }
+
     body {
-      background: #0a1628;
-      color: #f1f5f9;
-      font-family: 'Courier New', monospace;
-      min-height: 100vh;
+      background: var(--navy);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100dvh;
       display: flex;
       flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
     }
+
+    /* ── Header ── */
     header {
-      padding: 16px 20px;
-      border-bottom: 1px solid #1e3a6e;
+      width: 100%;
+      max-width: 480px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      margin-bottom: 24px;
     }
-    .logo { font-size: 18px; font-weight: 800; color: #f59e0b; letter-spacing: 2px; }
+    .logo {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--gold);
+    }
     .code-badge {
       background: #162d57;
-      border: 1px solid #1e3a6e;
+      border: 1px solid var(--border);
       border-radius: 8px;
       padding: 6px 14px;
       font-size: 22px;
       font-weight: 800;
-      letter-spacing: 6px;
-      color: #f59e0b;
+      letter-spacing: 10px;
+      color: var(--gold);
+      font-family: monospace;
     }
+
+    /* ── Status bar ── */
     #status-bar {
-      padding: 8px 20px;
-      font-size: 12px;
-      color: #64748b;
-      background: #04080f;
+      width: 100%;
+      max-width: 480px;
+      border-radius: 12px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      transition: background 0.4s, border-color 0.4s;
+    }
+    .status-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--dim);
+      flex-shrink: 0;
+    }
+    .status-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+    }
+
+    /* Alarm level colour states */
+    #status-bar.safe   { border-color: #10b98166; }
+    #status-bar.safe   .status-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    #status-bar.safe   .status-label { color: var(--green); }
+    #status-bar.nudge  { border-color: #f59e0b66; }
+    #status-bar.nudge  .status-dot { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+    #status-bar.nudge  .status-label { color: #f59e0b; }
+    #status-bar.alert  { border-color: #ef444466; background: #1a0a0a; }
+    #status-bar.alert  .status-dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    #status-bar.alert  .status-label { color: var(--red); }
+    #status-bar.emergency { border-color: var(--red); background: #1a0000; animation: pulse-red 1s ease-in-out infinite; }
+    #status-bar.emergency .status-dot { background: var(--red); box-shadow: 0 0 10px var(--red); }
+    #status-bar.emergency .status-label { color: var(--red); }
+    #status-bar.gps_lost  { border-color: #7c3aed66; background: #0d0a1a; }
+    #status-bar.gps_lost  .status-dot { background: #7c3aed; box-shadow: 0 0 8px #7c3aed; }
+    #status-bar.gps_lost  .status-label { color: #7c3aed; }
+    #status-bar.offline   { border-color: var(--border); }
+    #status-bar.offline   .status-dot { background: var(--dim); }
+    #status-bar.offline   .status-label { color: var(--muted); }
+
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50%       { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+    }
+
+    /* ── Cards ── */
+    .cards {
+      width: 100%;
+      max-width: 480px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .card.full { grid-column: 1 / -1; }
+    .card-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--dim);
+      margin-bottom: 6px;
+    }
+    .card-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: #e2e8f0;
+      line-height: 1;
+    }
+    .card-unit {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-left: 3px;
+    }
+    .card-sub {
+      font-size: 11px;
+      color: var(--dim);
+      margin-top: 4px;
+    }
+
+    /* Distance card colour */
+    #dist-card.breach .card-value { color: var(--red); }
+    #dist-card.approaching .card-value { color: #f59e0b; }
+
+    /* ── Compass ── */
+    .compass-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .compass {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      background: #06101c;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .compass-needle {
+      width: 3px; height: 34px;
+      background: linear-gradient(to bottom, var(--gold) 50%, var(--dim) 50%);
+      border-radius: 2px;
+      position: absolute;
+      transform-origin: center bottom;
+      bottom: 50%;
+      left: calc(50% - 1.5px);
+      transition: transform 0.6s ease;
+    }
+    .compass-label {
+      font-size: 10px;
+      color: var(--muted);
       letter-spacing: 1px;
     }
-    #status-bar.ok { color: #10b981; }
-    #status-bar.warn { color: #f59e0b; }
-    #status-bar.error { color: #ef4444; }
 
-    #map { flex: 1; min-height: 400px; background: #071225; }
+    /* ── Connection footer ── */
+    .conn-footer {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .conn-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--dim);
+      transition: background 0.3s;
+    }
+    .conn-dot.connected { background: var(--green); }
+    .conn-text { font-size: 11px; color: var(--dim); }
 
-    .panel {
-      padding: 16px 20px;
-      border-top: 1px solid #1e3a6e;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-    }
-    .stat {
-      background: #0f2040;
-      border: 1px solid #1e3a6e;
-      border-radius: 10px;
-      padding: 12px 16px;
-    }
-    .stat-label {
+    /* ── Updated timestamp ── */
+    #updated {
       font-size: 10px;
-      color: #475569;
-      letter-spacing: 2px;
-      margin-bottom: 4px;
-    }
-    .stat-value {
-      font-size: 24px;
-      font-weight: 700;
-      color: #f1f5f9;
-    }
-    .stat-value.amber { color: #f59e0b; }
-    .stat-value.green { color: #10b981; }
-    .stat-value.red   { color: #ef4444; }
-
-    .alarm-banner {
-      display: none;
-      background: #ef4444;
-      color: #fff;
+      color: var(--dim);
+      margin-top: 4px;
       text-align: center;
-      padding: 10px;
-      font-size: 16px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      animation: blink 0.5s infinite;
-    }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-    footer {
-      padding: 10px 20px;
-      font-size: 11px;
-      color: #334155;
-      text-align: center;
-      border-top: 1px solid #1e3a6e;
     }
   </style>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
 
-<div id="alarm-banner" class="alarm-banner">ANCHOR DRAG ALARM</div>
+  <header>
+    <div class="logo">HOLDFAST</div>
+    <div class="code-badge" id="code-display">__CODE__</div>
+  </header>
 
-<header>
-  <span class="logo">⚓ ANCHORSIMPLE</span>
-  <span class="code-badge">__CODE__</span>
-</header>
-
-<div id="status-bar">Connecting...</div>
-
-<div id="map"></div>
-
-<div class="panel">
-  <div class="stat">
-    <div class="stat-label">DISTANCE FROM ANCHOR</div>
-    <div class="stat-value amber" id="stat-dist">—</div>
+  <div id="status-bar" class="offline">
+    <div class="status-dot"></div>
+    <div class="status-label" id="status-label">CONNECTING…</div>
   </div>
-  <div class="stat">
-    <div class="stat-label">ALARM STATUS</div>
-    <div class="stat-value green" id="stat-alarm">SILENT</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">BOAT POSITION</div>
-    <div class="stat-value" id="stat-pos" style="font-size:13px;margin-top:4px;">—</div>
-  </div>
-  <div class="stat">
-    <div class="stat-label">LAST UPDATE</div>
-    <div class="stat-value" id="stat-ts" style="font-size:14px;">—</div>
-  </div>
-</div>
 
-<footer>AnchorSimple remote watch — read-only view</footer>
+  <div class="cards">
+    <div class="card" id="dist-card">
+      <div class="card-label">DISTANCE FROM ANCHOR</div>
+      <div class="card-value">—<span class="card-unit">m</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">DIRECTION TO ANCHOR</div>
+      <div class="compass-wrap">
+        <div class="compass">
+          <div class="compass-needle" id="needle"></div>
+        </div>
+        <div class="compass-label" id="bearing-label">—</div>
+      </div>
+    </div>
+    <div class="card full" id="radius-card">
+      <div class="card-label">DRAG RADIUS</div>
+      <div class="card-value">—<span class="card-unit">m</span></div>
+      <div class="card-sub" id="pct-sub"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">ANCHOR POSITION</div>
+      <div class="card-value" style="font-size:14px; color:var(--muted)" id="anchor-pos">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">BOAT POSITION</div>
+      <div class="card-value" style="font-size:14px; color:var(--muted)" id="boat-pos">—</div>
+    </div>
+  </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <div class="conn-footer">
+    <div class="conn-dot" id="conn-dot"></div>
+    <div class="conn-text" id="conn-text">Connecting to relay…</div>
+  </div>
+  <div id="updated"></div>
+
 <script>
-  const CODE = document.querySelector('.code-badge').textContent.trim();
-  const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?code=${CODE}&role=watch`;
+  const CODE = '__CODE__';
 
-  // ── Map setup ────────────────────────────────────────────────────────
-  const map = L.map('map', { zoomControl: true }).setView([55, -4], 15);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    maxZoom: 19,
-  }).addTo(map);
+  // ── State ──────────────────────────────────────────────────────────────────
+  let state = {
+    alarm: 'silent',
+    distance: null,
+    radius: null,
+    anchorLat: null, anchorLng: null,
+    boatLat: null, boatLng: null,
+  };
 
-  let boatMarker = null;
-  let anchorMarker = null;
-  let anchorCircle = null;
-  const trailCoords = [];
-  let trailLine = null;
+  // ── WebSocket ──────────────────────────────────────────────────────────────
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const WS_URL = `${proto}://${location.host}/ws?code=${CODE}&role=watch`;
 
-  const boatIcon = L.divIcon({ html: '⛵', className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
-  const anchorIcon = L.divIcon({ html: '⚓', className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
-
-  // ── WebSocket ────────────────────────────────────────────────────────
-  let ws;
+  let ws = null;
+  let reconnectTimer = null;
+  let connected = false;
 
   function connect() {
     ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
-      setStatus('Connected — receiving live data', 'ok');
-    };
-
-    ws.onclose = () => {
-      setStatus('Disconnected — reconnecting...', 'error');
-      setTimeout(connect, 3000);
-    };
-
-    ws.onerror = () => {
-      setStatus('Connection error', 'error');
+      connected = true;
+      setConnUI(true);
     };
 
     ws.onmessage = (e) => {
@@ -176,86 +293,146 @@
         handleMessage(msg);
       } catch {}
     };
+
+    ws.onclose = () => {
+      connected = false;
+      setConnUI(false);
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connect, 3000);
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
   }
 
   function handleMessage(msg) {
-    const ts = new Date(msg.ts).toLocaleTimeString();
-    document.getElementById('stat-ts').textContent = ts;
-
     if (msg.type === 'position') {
-      const { lat, lng, distanceFromAnchor } = msg.payload;
-      const latlng = [lat, lng];
-
-      if (!boatMarker) {
-        boatMarker = L.marker(latlng, { icon: boatIcon }).addTo(map);
-        map.setView(latlng, 15);
-      } else {
-        boatMarker.setLatLng(latlng);
+      state.boatLat = msg.payload.lat;
+      state.boatLng = msg.payload.lng;
+      state.distance = msg.payload.distanceFromAnchor;
+    } else if (msg.type === 'anchor') {
+      state.anchorLat = msg.payload.lat;
+      state.anchorLng = msg.payload.lng;
+      state.radius = msg.payload.radius;
+    } else if (msg.type === 'alarm') {
+      state.alarm = msg.payload.level;
+      if (msg.payload.distanceFromAnchor != null) {
+        state.distance = msg.payload.distanceFromAnchor;
       }
+    }
+    render();
+    document.getElementById('updated').textContent =
+      'Last update: ' + new Date().toLocaleTimeString();
+  }
 
-      trailCoords.push(latlng);
-      if (trailCoords.length > 1000) trailCoords.shift();
-      if (trailLine) map.removeLayer(trailLine);
-      trailLine = L.polyline(trailCoords, { color: '#f1f5f9', weight: 2, opacity: 0.7 }).addTo(map);
+  // ── Render ─────────────────────────────────────────────────────────────────
+  const ALARM_LABELS = {
+    silent:    'HOLDING — ALL CLEAR',
+    nudge:     'APPROACHING BOUNDARY',
+    alert:     'ALARM — BOUNDARY REACHED',
+    emergency: 'EMERGENCY — DRAGGING',
+    gps_lost:  'GPS SIGNAL LOST',
+  };
 
-      document.getElementById('stat-dist').textContent =
-        distanceFromAnchor < 1000
-          ? `${Math.round(distanceFromAnchor)}m`
-          : `${(distanceFromAnchor / 1000).toFixed(2)}km`;
+  function render() {
+    // Status bar
+    const bar = document.getElementById('status-bar');
+    const label = document.getElementById('status-label');
+    const level = connected ? state.alarm : 'offline';
+    bar.className = level;
+    label.textContent = connected
+      ? (ALARM_LABELS[state.alarm] ?? state.alarm.toUpperCase())
+      : 'BOAT APP OFFLINE';
 
-      document.getElementById('stat-pos').textContent =
-        `${lat.toFixed(5)}°  ${lng.toFixed(5)}°`;
+    // Distance
+    const distCard = document.getElementById('dist-card');
+    const distVal = distCard.querySelector('.card-value');
+    if (state.distance != null) {
+      distVal.innerHTML = `${Math.round(state.distance)}<span class="card-unit">m</span>`;
+      const pct = state.radius ? state.distance / state.radius : 0;
+      distCard.className = 'card' + (pct >= 1 ? ' breach' : pct >= 0.8 ? ' approaching' : '');
+    } else {
+      distVal.innerHTML = `—<span class="card-unit">m</span>`;
+      distCard.className = 'card';
     }
 
-    if (msg.type === 'anchor') {
-      const { lat, lng, radius } = msg.payload;
-      const latlng = [lat, lng];
-
-      if (!anchorMarker) {
-        anchorMarker = L.marker(latlng, { icon: anchorIcon }).addTo(map);
+    // Radius card
+    const radCard = document.getElementById('radius-card');
+    const radVal = radCard.querySelector('.card-value');
+    const pctSub = document.getElementById('pct-sub');
+    if (state.radius != null) {
+      radVal.innerHTML = `${state.radius}<span class="card-unit">m</span>`;
+      if (state.distance != null) {
+        const pct = Math.round((state.distance / state.radius) * 100);
+        pctSub.textContent = `${pct}% of drag radius used`;
       } else {
-        anchorMarker.setLatLng(latlng);
+        pctSub.textContent = '';
       }
-
-      if (anchorCircle) map.removeLayer(anchorCircle);
-      anchorCircle = L.circle(latlng, {
-        radius,
-        color: '#10b981',
-        weight: 2,
-        fillOpacity: 0.05,
-      }).addTo(map);
+    } else {
+      radVal.innerHTML = `—<span class="card-unit">m</span>`;
+      pctSub.textContent = '';
     }
 
-    if (msg.type === 'alarm') {
-      const { level } = msg.payload;
-      const el = document.getElementById('stat-alarm');
-      const banner = document.getElementById('alarm-banner');
+    // Bearing compass
+    const bearing = calcBearing(
+      state.boatLat, state.boatLng,
+      state.anchorLat, state.anchorLng
+    );
+    const needle = document.getElementById('needle');
+    const bearingLabel = document.getElementById('bearing-label');
+    if (bearing != null) {
+      needle.style.transform = `rotate(${bearing}deg)`;
+      bearingLabel.textContent = `${Math.round(bearing)}° to anchor`;
+    } else {
+      needle.style.transform = 'rotate(0deg)';
+      bearingLabel.textContent = '—';
+    }
 
-      const colorMap = { silent: 'green', nudge: 'amber', alert: 'amber', emergency: 'red' };
-      el.className = 'stat-value ' + (colorMap[level] || '');
-      el.textContent = level.toUpperCase();
+    // Positions
+    document.getElementById('anchor-pos').textContent =
+      state.anchorLat != null
+        ? `${state.anchorLat.toFixed(5)}, ${state.anchorLng.toFixed(5)}`
+        : '—';
+    document.getElementById('boat-pos').textContent =
+      state.boatLat != null
+        ? `${state.boatLat.toFixed(5)}, ${state.boatLng.toFixed(5)}`
+        : '—';
+  }
 
-      if (level === 'emergency' || level === 'alert') {
-        banner.style.display = 'block';
-        banner.textContent = level === 'emergency' ? '🚨 ANCHOR DRAGGING — EMERGENCY' : '⚠️ ANCHOR DRAG ALERT';
-      } else {
-        banner.style.display = 'none';
-      }
-
-      if (anchorCircle) {
-        const colors = { silent: '#10b981', nudge: '#f59e0b', alert: '#f97316', emergency: '#ef4444' };
-        anchorCircle.setStyle({ color: colors[level] || '#10b981' });
-      }
+  function setConnUI(isConnected) {
+    const dot = document.getElementById('conn-dot');
+    const text = document.getElementById('conn-text');
+    dot.className = 'conn-dot' + (isConnected ? ' connected' : '');
+    text.textContent = isConnected
+      ? 'Connected to relay'
+      : 'Reconnecting…';
+    if (!isConnected) {
+      // Reset status bar to offline
+      document.getElementById('status-bar').className = 'offline';
+      document.getElementById('status-label').textContent = 'WAITING FOR BOAT APP…';
     }
   }
 
-  function setStatus(msg, cls) {
-    const el = document.getElementById('status-bar');
-    el.textContent = msg;
-    el.className = cls || '';
+  // ── Geometry ───────────────────────────────────────────────────────────────
+  function calcBearing(fromLat, fromLng, toLat, toLng) {
+    if (fromLat == null || toLat == null) return null;
+    const toRad = d => d * Math.PI / 180;
+    const dLng = toRad(toLng - fromLng);
+    const lat1 = toRad(fromLat);
+    const lat2 = toRad(toLat);
+    const x = Math.sin(dLng) * Math.cos(lat2);
+    const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    const bearing = (Math.atan2(x, y) * 180 / Math.PI + 360) % 360;
+    return bearing;
   }
 
-  connect();
+  // ── Init ───────────────────────────────────────────────────────────────────
+  if (!CODE || CODE === '__CODE__') {
+    document.getElementById('status-label').textContent = 'NO CODE PROVIDED';
+  } else {
+    connect();
+  }
 </script>
 </body>
 </html>

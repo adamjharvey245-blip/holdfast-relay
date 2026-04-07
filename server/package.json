@@ -1,0 +1,15 @@
+{
+  "name": "holdfast-relay",
+  "version": "1.0.0",
+  "description": "HoldFast anchor alarm WebSocket relay server",
+  "main": "relay.js",
+  "scripts": {
+    "start": "node relay.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
