@@ -78,12 +78,14 @@ wss.on('connection', (ws, req) => {
     console.log(`[Boat] Connected  code=${code}`);
 
     ws.on('message', (data) => {
-      // Broadcast to all watchers on this code
+      // Convert Buffer → string so browser WebSocket receives a text frame,
+      // not a binary Blob that JSON.parse() cannot handle.
+      const text = data.toString();
       const clients = watchers.get(code);
       if (!clients) return;
       for (const watcher of clients) {
         if (watcher.readyState === WebSocket.OPEN) {
-          watcher.send(data);
+          watcher.send(text);
         }
       }
     });
