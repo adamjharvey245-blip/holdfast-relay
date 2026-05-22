@@ -11,16 +11,17 @@
 import { useAnchorStore } from '@/store/anchorStore';
 import type { RelayMessage } from '@/types';
 
-// Replace with your deployed relay server WebSocket URL
-const RELAY_WS_URL = 'wss://your-relay.example.com/ws';
+const RELAY_WS_URL = 'wss://holdfast-relay-production.up.railway.app/ws';
 const RECONNECT_DELAY_MS = 3000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const MAX_RECONNECT_DELAY_MS = 30000;
+const KEEPALIVE_INTERVAL_MS = 25000; // under Railway's 30s idle timeout
 
 class RelayClient {
   private ws: WebSocket | null = null;
   private code: string | null = null;
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = false;
 
   connect(code: string) {
@@ -33,6 +34,7 @@ class RelayClient {
   disconnect() {
     this.shouldReconnect = false;
     this.clearReconnectTimer();
+    this.clearKeepalive();
     if (this.ws) {
       this.ws.close(1000, 'User disconnected');
       this.ws = null;
@@ -72,6 +74,13 @@ class RelayClient {
     }
   }
 
+  onStatusChange: ((connected: boolean) => void) | null = null;
+  onOpen: (() => void) | null = null;
+
+  private notifyStatus(connected: boolean) {
+    this.onStatusChange?.(connected);
+  }
+
   private openConnection() {
     if (this.ws) {
       this.ws.onclose = null;
@@ -84,6 +93,9 @@ class RelayClient {
       this.ws.onopen = () => {
         console.log('[Relay] Connected, code:', this.code);
         this.reconnectAttempts = 0;
+        this.notifyStatus(true);
+        this.startKeepalive();
+        this.onOpen?.();
       };
 
       this.ws.onerror = (e) => {
@@ -92,6 +104,8 @@ class RelayClient {
 
       this.ws.onclose = (e) => {
         console.warn('[Relay] Disconnected:', e.code, e.reason);
+        this.clearKeepalive();
+        this.notifyStatus(false);
         if (this.shouldReconnect) this.scheduleReconnect();
       };
     } catch (err) {
@@ -101,12 +115,10 @@ class RelayClient {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.warn('[Relay] Max reconnect attempts reached');
-      return;
-    }
     this.reconnectAttempts++;
-    const delay = RECONNECT_DELAY_MS * Math.min(this.reconnectAttempts, 5);
+    // Exponential backoff capped at MAX_RECONNECT_DELAY_MS — retries indefinitely
+    const delay = Math.min(RECONNECT_DELAY_MS * Math.min(this.reconnectAttempts, 10), MAX_RECONNECT_DELAY_MS);
+    console.log(`[Relay] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
     this.clearReconnectTimer();
     this.reconnectTimer = setTimeout(() => this.openConnection(), delay);
   }
@@ -115,6 +127,22 @@ class RelayClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+  }
+
+  private startKeepalive() {
+    this.clearKeepalive();
+    this.keepaliveTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping', code: this.code ?? '', ts: Date.now() }));
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private clearKeepalive() {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
     }
   }
 }
@@ -129,7 +157,12 @@ export function startRelayBroadcast() {
   const store = useAnchorStore.getState();
   const { watchCode, boatPosition, anchorPosition, currentDistance, alarmLevel, watchRadius } = store;
 
-  if (!watchCode || !boatPosition) return;
+  console.log('[Relay] startRelayBroadcast — code:', watchCode, 'hasPosition:', !!boatPosition, 'wsReady:', (relayClient as any).ws?.readyState);
+
+  if (!watchCode || !boatPosition) {
+    console.log('[Relay] broadcast skipped — missing watchCode or boatPosition');
+    return;
+  }
 
   relayClient.sendPosition(
     boatPosition.latitude,
@@ -142,4 +175,5 @@ export function startRelayBroadcast() {
   }
 
   relayClient.sendAlarm(alarmLevel, currentDistance);
+  console.log('[Relay] broadcast sent — pos:', boatPosition.latitude.toFixed(5), boatPosition.longitude.toFixed(5), 'alarm:', alarmLevel);
 }

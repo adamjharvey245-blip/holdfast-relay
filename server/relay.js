@@ -62,7 +62,24 @@ const watchers = new Map();
 // Map: code -> WebSocket  (boat connection, one per code)
 const boats = new Map();
 
+// Server-side heartbeat — terminates connections that stop responding.
+// Runs every 30 s; any client that doesn't reply to a ping within that
+// window is presumed dead and terminated so Railway cleans up the socket.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      return;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, HEARTBEAT_INTERVAL_MS);
+
 wss.on('connection', (ws, req) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const code = url.searchParams.get('code');
   const role = url.searchParams.get('role') ?? 'watch';
@@ -81,6 +98,13 @@ wss.on('connection', (ws, req) => {
       // Convert Buffer → string so browser WebSocket receives a text frame,
       // not a binary Blob that JSON.parse() cannot handle.
       const text = data.toString();
+
+      // Drop keepalive pings — don't forward to watchers
+      try {
+        const msg = JSON.parse(text);
+        if (msg.type === 'ping') return;
+      } catch { /* not JSON — forward anyway */ }
+
       const clients = watchers.get(code);
       if (!clients) return;
       for (const watcher of clients) {
