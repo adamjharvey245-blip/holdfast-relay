@@ -8,6 +8,7 @@ import {
   Modal,
   Dimensions,
   Animated,
+  findNodeHandle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { tourRefs, TourTargetKey } from './tourTargets';
@@ -110,9 +111,13 @@ interface AppTourProps {
 
 type Rect = { x: number; y: number; w: number; h: number };
 
+// TEMP: on-screen diagnostic for the drop-anchor highlight offset. Remove once fixed.
+const TOUR_DEBUG = true;
+
 export function AppTour({ visible, onDone }: AppTourProps) {
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
+  const [dbg, setDbg] = useState<string>('');
   const fade = useRef(new Animated.Value(0)).current;
 
   const current = TOUR_STEPS[step];
@@ -126,25 +131,39 @@ export function AppTour({ visible, onDone }: AppTourProps) {
       setRect(null);
       return;
     }
+    // A control overlaid on the native map (the drop button) can have its
+    // measureInWindow reported relative to the map's frame on iOS, dropping the
+    // status-bar + header offset above it (the highlight then lands up in the
+    // status bar). Reconstruct the true window rect from the target's layout
+    // offset *inside* the map container (from React's layout tree, reliable)
+    // plus the container's own window position.
+    const mapNode = current.overMap ? tourRefs.mapRoot?.current : null;
+    const mapHandle = mapNode ? findNodeHandle(mapNode) : null;
+    if (mapNode && mapHandle != null && typeof node.measureLayout === 'function') {
+      node.measureLayout(
+        mapHandle,
+        (lx: number, ly: number, lw: number, lh: number) => {
+          mapNode.measureInWindow((mx: number, my: number) => {
+            if (!lw && !lh) { setRect(null); return; }
+            if (TOUR_DEBUG) setDbg(`lay x${lx | 0} y${ly | 0} w${lw | 0} h${lh | 0} | map x${mx | 0} y${my | 0} | scr ${SW | 0}x${SH | 0}`);
+            setRect({ x: mx + lx, y: my + ly, w: lw, h: lh });
+          });
+        },
+        () => {
+          // Fallback to raw window measurement if measureLayout fails.
+          node.measureInWindow((x: number, y: number, w: number, h: number) => {
+            if (TOUR_DEBUG) setDbg(`layout FAILED — raw tgt x${x | 0} y${y | 0} | scr ${SW | 0}x${SH | 0}`);
+            if (!w && !h) setRect(null);
+            else setRect({ x, y, w, h });
+          });
+        },
+      );
+      return;
+    }
+
     node.measureInWindow((x: number, y: number, w: number, h: number) => {
-      if (!w && !h) { setRect(null); return; }
-
-      // On iOS a control overlaid on the native map can report its position
-      // relative to the map's frame, dropping the status-bar + header offset
-      // above it (the highlight then lands up in the status bar). If the
-      // target measures *above* its own map container — which is impossible
-      // when correct — re-anchor it by the container's window offset. The
-      // guard means correctly-measured targets are never touched.
-      const mapNode = current.overMap ? tourRefs.mapRoot?.current : null;
-      if (mapNode && typeof mapNode.measureInWindow === 'function') {
-        mapNode.measureInWindow((mx: number, my: number) => {
-          if (y < my) setRect({ x: x + mx, y: y + my, w, h });
-          else setRect({ x, y, w, h });
-        });
-        return;
-      }
-
-      setRect({ x, y, w, h });
+      if (!w && !h) setRect(null);
+      else setRect({ x, y, w, h });
     });
   }, [current]);
 
@@ -243,6 +262,9 @@ export function AppTour({ visible, onDone }: AppTourProps) {
 
           <Text style={styles.title}>{current.title}</Text>
           <Text style={styles.body}>{current.body}</Text>
+          {TOUR_DEBUG && current.overMap && !!dbg && (
+            <Text style={{ color: '#fbbf24', fontSize: 11, fontFamily: 'monospace' }}>{dbg}</Text>
+          )}
 
           {/* Progress dots */}
           <View style={styles.dotsRow}>
