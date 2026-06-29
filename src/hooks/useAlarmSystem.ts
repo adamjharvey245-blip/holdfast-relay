@@ -200,6 +200,9 @@ export function useAlarmSystem() {
     });
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
+        // shouldShowAlert is deprecated in SDK 54+ — banner/list are now required
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,

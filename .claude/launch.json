@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "watch-page",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "server", "--listen", "3333", "--no-clipboard"],
+      "port": 3333
+    }
+  ]
+}

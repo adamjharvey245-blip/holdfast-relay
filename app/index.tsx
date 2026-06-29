@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Alert, Animated, AppState, Platform, Modal, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,12 +8,14 @@ import { RadarMap } from '@/components/RadarMap';
 import { TimeSlider } from '@/components/TimeSlider';
 import { RadiusControl } from '@/components/RadiusControl';
 import { AppTour } from '@/components/AppTour';
+import { tourRefs } from '@/components/tourTargets';
 import { useAnchorStore } from '@/store/anchorStore';
 import { useTideData } from '@/hooks/useTideData';
+import { useReviewPrompt } from '@/hooks/useReviewPrompt';
 import { offsetCoordinate, bearingDegrees } from '@/utils/haversine';
 import { TOUR_KEY } from './onboarding';
 
-type Panel = 'none' | 'radius' | 'playback' | 'relativeAnchor';
+type Panel = 'none' | 'radius' | 'playback' | 'relativeAnchor' | 'coordInput';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,15 +72,15 @@ function GpsStrengthBar({ accuracy, status, lastFix }: { accuracy: number | null
 
 const sStyles = StyleSheet.create({
   container: {
-    backgroundColor: '#0a1628cc', borderRadius: 8,
-    paddingHorizontal: 8, paddingVertical: 6,
+    backgroundColor: '#0a1628d9', borderRadius: 12,
+    paddingHorizontal: 10, paddingVertical: 7,
     borderWidth: 1, borderColor: '#1e3a6e', gap: 3,
   },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   bars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 20 },
   bar: { width: 4, borderRadius: 1 },
   label: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  fixTime: { fontSize: 9, color: '#475569', fontFamily: 'monospace', letterSpacing: 0.3 },
+  fixTime: { fontSize: 9, color: '#ffffff', fontFamily: 'monospace', letterSpacing: 0.3 },
 });
 
 // ─── Relative Anchor Panel ────────────────────────────────────────────────────
@@ -97,6 +99,8 @@ function RelativeAnchorPanel({
   const cardinal = bearingToCardinal(bearing);
   const rotateBearing = (delta: number) =>
     onBearingChange(((bearing + delta) % 360 + 360) % 360);
+  const { isPremium } = useAnchorStore();
+  const router = useRouter();
 
   // ── Compass ──────────────────────────────────────────────────────────────
   const [compassActive, setCompassActive] = useState(false);
@@ -145,12 +149,20 @@ function RelativeAnchorPanel({
       <View style={rStyles.labelRow}>
         <Text style={rStyles.label}>BEARING</Text>
         <TouchableOpacity
-          style={[rStyles.compassBtn, compassActive && rStyles.compassBtnActive]}
-          onPress={toggleCompass}
+          style={[rStyles.compassBtn, compassActive && rStyles.compassBtnActive, !isPremium && rStyles.compassBtnLocked]}
+          onPress={isPremium ? toggleCompass : () => Alert.alert(
+            'Live Compass Bearing',
+            'Point your phone toward the anchor and the bearing updates live — tap again to lock it in.',
+            [{ text: 'Not now', style: 'cancel' }, { text: 'Go Premium', onPress: () => router.push('/upgrade') }]
+          )}
         >
-          <Ionicons name="compass-outline" size={14} color={compassActive ? '#0a1628' : '#C9A227'} />
+          <Ionicons
+            name={isPremium ? 'compass-outline' : 'lock-closed-outline'}
+            size={14}
+            color={compassActive ? '#0a1628' : '#C9A227'}
+          />
           <Text style={[rStyles.compassBtnText, compassActive && rStyles.compassBtnTextActive]}>
-            {compassActive ? `LIVE ${compassHeading ?? '—'}°` : 'USE COMPASS'}
+            {!isPremium ? 'COMPASS — PREMIUM' : compassActive ? `LIVE ${compassHeading ?? '—'}°` : 'USE COMPASS'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -217,7 +229,7 @@ function RelativeAnchorPanel({
 
 const rStyles = StyleSheet.create({
   container: {
-    backgroundColor: '#0f2040', borderRadius: 12, padding: 14,
+    backgroundColor: '#0f2040', borderRadius: 16, padding: 14,
     marginHorizontal: 16, borderWidth: 1, borderColor: '#1e3a6e', gap: 10,
   },
   heading: { color: '#C9A227', fontSize: 11, fontWeight: '800', letterSpacing: 2 },
@@ -225,9 +237,9 @@ const rStyles = StyleSheet.create({
     backgroundColor: '#162d57', borderRadius: 10, padding: 12,
     alignItems: 'center',
   },
-  summaryMain: { color: '#f1f5f9', fontSize: 22, fontWeight: '700' },
-  summaryBearing: { color: '#64748b', fontSize: 12, marginTop: 2 },
-  label: { color: '#475569', fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  summaryMain: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
+  summaryBearing: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
+  label: { color: '#94a3b8', fontSize: 10, fontWeight: '700', letterSpacing: 2 },
   labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   compassBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -235,34 +247,275 @@ const rStyles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5,
   },
   compassBtnActive: { backgroundColor: '#C9A227', borderColor: '#C9A227' },
+  compassBtnLocked: { borderColor: '#475569', opacity: 0.7 },
   compassBtnText: { color: '#C9A227', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
   compassBtnTextActive: { color: '#0a1628' },
   compassHint: {
     flexDirection: 'row', gap: 6, alignItems: 'flex-start',
     backgroundColor: '#162d57', borderRadius: 8, padding: 8,
   },
-  compassHintText: { color: '#475569', fontSize: 11, lineHeight: 16, flex: 1 },
+  compassHintText: { color: '#94a3b8', fontSize: 11, lineHeight: 16, flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#162d57', alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: '#1e3a6e',
   },
-  btnText: { color: '#f1f5f9', fontSize: 11, fontWeight: '700' },
+  btnText: { color: '#ffffff', fontSize: 11, fontWeight: '700' },
   valueBox: { minWidth: 70, alignItems: 'center' },
   valueMain: { color: '#C9A227', fontSize: 26, fontWeight: '700' },
-  valueSub: { color: '#64748b', fontSize: 11 },
+  valueSub: { color: '#94a3b8', fontSize: 11 },
   actions: { flexDirection: 'row', gap: 10 },
   cancelBtn: {
     flex: 1, paddingVertical: 12, borderRadius: 8,
     borderWidth: 1, borderColor: '#334155', alignItems: 'center',
   },
-  cancelText: { color: '#64748b', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  cancelText: { color: '#94a3b8', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
   dropBtn: {
     flex: 2, paddingVertical: 12, borderRadius: 8,
     backgroundColor: '#C9A227', alignItems: 'center',
   },
   dropText: { color: '#0a1628', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+});
+
+// ─── Coordinate Input Panel ───────────────────────────────────────────────────
+
+function CoordinateInputPanel({
+  onDrop,
+  onCancel,
+}: {
+  onDrop: (coord: { latitude: number; longitude: number }) => void;
+  onCancel: () => void;
+}) {
+  const [latDeg, setLatDeg] = useState('');
+  const [latMin, setLatMin] = useState('');
+  const [latHem, setLatHem] = useState<'N' | 'S'>('S');
+  const [lonDeg, setLonDeg] = useState('');
+  const [lonMin, setLonMin] = useState('');
+  const [lonHem, setLonHem] = useState<'E' | 'W'>('E');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDrop = () => {
+    const ld = parseFloat(latDeg);
+    const lm = parseFloat(latMin);
+    const lod = parseFloat(lonDeg);
+    const lom = parseFloat(lonMin);
+
+    if (isNaN(ld) || isNaN(lm) || isNaN(lod) || isNaN(lom)) {
+      setError('Enter degrees and minutes for both coordinates.');
+      return;
+    }
+    if (ld < 0 || ld > 90 || lm < 0 || lm >= 60) {
+      setError('Latitude: degrees 0–90, minutes 0–59.999');
+      return;
+    }
+    if (lod < 0 || lod > 180 || lom < 0 || lom >= 60) {
+      setError('Longitude: degrees 0–180, minutes 0–59.999');
+      return;
+    }
+
+    const latitude = (ld + lm / 60) * (latHem === 'S' ? -1 : 1);
+    const longitude = (lod + lom / 60) * (lonHem === 'W' ? -1 : 1);
+    onDrop({ latitude, longitude });
+  };
+
+  const preview =
+    latDeg && latMin && lonDeg && lonMin
+      ? `${latDeg}° ${latMin}' ${latHem}   ${lonDeg}° ${lonMin}' ${lonHem}`
+      : null;
+
+  return (
+    <KeyboardAvoidingView behavior="padding">
+      <View style={cStyles.container}>
+        <Text style={cStyles.heading}>ENTER COORDINATES</Text>
+        <Text style={cStyles.hint}>Chartplotter format — degrees and decimal minutes</Text>
+
+        {/* Latitude */}
+        <Text style={cStyles.label}>LATITUDE</Text>
+        <View style={cStyles.row}>
+          <TextInput
+            style={cStyles.degInput}
+            value={latDeg}
+            onChangeText={(t) => { setLatDeg(t.replace(/[^0-9]/g, '')); setError(null); }}
+            keyboardType="number-pad"
+            placeholder="33"
+            placeholderTextColor="#334155"
+            maxLength={2}
+          />
+          <Text style={cStyles.unit}>°</Text>
+          <TextInput
+            style={cStyles.minInput}
+            value={latMin}
+            onChangeText={(t) => { setLatMin(t.replace(/[^0-9.]/g, '')); setError(null); }}
+            keyboardType="decimal-pad"
+            placeholder="51.234"
+            placeholderTextColor="#334155"
+            maxLength={7}
+          />
+          <Text style={cStyles.unit}>&apos;</Text>
+          <View style={cStyles.hemRow}>
+            {(['N', 'S'] as const).map((h) => (
+              <TouchableOpacity
+                key={h}
+                style={[cStyles.hemBtn, latHem === h && cStyles.hemBtnActive]}
+                onPress={() => setLatHem(h)}
+              >
+                <Text style={[cStyles.hemText, latHem === h && cStyles.hemTextActive]}>{h}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Longitude */}
+        <Text style={cStyles.label}>LONGITUDE</Text>
+        <View style={cStyles.row}>
+          <TextInput
+            style={cStyles.degInput}
+            value={lonDeg}
+            onChangeText={(t) => { setLonDeg(t.replace(/[^0-9]/g, '')); setError(null); }}
+            keyboardType="number-pad"
+            placeholder="151"
+            placeholderTextColor="#334155"
+            maxLength={3}
+          />
+          <Text style={cStyles.unit}>°</Text>
+          <TextInput
+            style={cStyles.minInput}
+            value={lonMin}
+            onChangeText={(t) => { setLonMin(t.replace(/[^0-9.]/g, '')); setError(null); }}
+            keyboardType="decimal-pad"
+            placeholder="12.567"
+            placeholderTextColor="#334155"
+            maxLength={7}
+          />
+          <Text style={cStyles.unit}>&apos;</Text>
+          <View style={cStyles.hemRow}>
+            {(['E', 'W'] as const).map((h) => (
+              <TouchableOpacity
+                key={h}
+                style={[cStyles.hemBtn, lonHem === h && cStyles.hemBtnActive]}
+                onPress={() => setLonHem(h)}
+              >
+                <Text style={[cStyles.hemText, lonHem === h && cStyles.hemTextActive]}>{h}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {preview && (
+          <View style={cStyles.preview}>
+            <Text style={cStyles.previewText}>{preview}</Text>
+          </View>
+        )}
+
+        {error && <Text style={cStyles.error}>{error}</Text>}
+
+        <View style={rStyles.actions}>
+          <TouchableOpacity style={rStyles.cancelBtn} onPress={onCancel}>
+            <Text style={rStyles.cancelText}>CANCEL</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={rStyles.dropBtn} onPress={handleDrop}>
+            <Text style={rStyles.dropText}>DROP ANCHOR HERE</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const cStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#0f2040', borderRadius: 16, padding: 14,
+    marginHorizontal: 16, borderWidth: 1, borderColor: '#1e3a6e', gap: 10,
+  },
+  heading: { color: '#C9A227', fontSize: 11, fontWeight: '800', letterSpacing: 2 },
+  hint: { color: '#475569', fontSize: 11 },
+  label: { color: '#94a3b8', fontSize: 10, fontWeight: '700', letterSpacing: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  degInput: {
+    width: 52, height: 44,
+    backgroundColor: '#162d57', borderRadius: 8,
+    borderWidth: 1, borderColor: '#1e3a6e',
+    color: '#ffffff', fontSize: 18, fontWeight: '700',
+    textAlign: 'center',
+  },
+  minInput: {
+    flex: 1, height: 44,
+    backgroundColor: '#162d57', borderRadius: 8,
+    borderWidth: 1, borderColor: '#1e3a6e',
+    color: '#ffffff', fontSize: 16, fontWeight: '600',
+    textAlign: 'center',
+  },
+  unit: { color: '#C9A227', fontSize: 18, fontWeight: '700', width: 14, textAlign: 'center' },
+  hemRow: { flexDirection: 'row', gap: 4 },
+  hemBtn: {
+    width: 36, height: 44, borderRadius: 8,
+    backgroundColor: '#162d57', borderWidth: 1, borderColor: '#1e3a6e',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  hemBtnActive: { backgroundColor: '#C9A227', borderColor: '#C9A227' },
+  hemText: { color: '#94a3b8', fontSize: 14, fontWeight: '800' },
+  hemTextActive: { color: '#0a1628' },
+  preview: {
+    backgroundColor: '#162d57', borderRadius: 8, padding: 10,
+    alignItems: 'center', borderWidth: 1, borderColor: '#1e3a6e',
+  },
+  previewText: { color: '#ffffff', fontSize: 15, fontWeight: '700', fontFamily: 'monospace', letterSpacing: 1 },
+  error: { color: '#ef4444', fontSize: 11, fontWeight: '600' },
+});
+
+// ─── Review Prompt Modal ──────────────────────────────────────────────────────
+
+function ReviewPromptModal({
+  visible,
+  onYes,
+  onNo,
+}: {
+  visible: boolean;
+  onYes: () => void;
+  onNo: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
+      <View style={reviewStyles.backdrop}>
+        <View style={reviewStyles.card}>
+          <Text style={reviewStyles.anchor}>⚓</Text>
+          <Text style={reviewStyles.title}>Enjoying HoldFast?</Text>
+          <Text style={reviewStyles.body}>
+            If the app is keeping your boat safe, a quick review helps other sailors find it.
+          </Text>
+          <TouchableOpacity style={reviewStyles.yesBtn} onPress={onYes}>
+            <Text style={reviewStyles.yesText}>YES — LEAVE A REVIEW</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={reviewStyles.noBtn} onPress={onNo}>
+            <Text style={reviewStyles.noText}>Not right now</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const reviewStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: '#04080fcc',
+    alignItems: 'center', justifyContent: 'center', padding: 32,
+  },
+  card: {
+    backgroundColor: '#0a1628', borderRadius: 16,
+    borderWidth: 1, borderColor: '#1e3a6e',
+    padding: 24, alignItems: 'center', gap: 12, width: '100%',
+  },
+  anchor: { fontSize: 36 },
+  title: { color: '#ffffff', fontSize: 20, fontWeight: '800', letterSpacing: 0.5, textAlign: 'center' },
+  body: { color: '#94a3b8', fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  yesBtn: {
+    backgroundColor: '#C9A227', borderRadius: 10,
+    paddingVertical: 14, paddingHorizontal: 24, width: '100%', alignItems: 'center',
+  },
+  yesText: { color: '#0a1628', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
+  noBtn: { paddingVertical: 8 },
+  noText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -271,6 +524,7 @@ export default function HomeScreen() {
   useTideData();
 
   const router = useRouter();
+  const { showPrompt, recordActivation, handleEnjoyingApp, handleNotEnjoyingApp } = useReviewPrompt();
   const [activePanel, setActivePanel] = useState<Panel>('none');
   const [showDropMenu, setShowDropMenu] = useState(false);
   const [tapToPlace, setTapToPlace] = useState(false);
@@ -312,6 +566,42 @@ export default function HomeScreen() {
     setShowTour(false);
   };
 
+  // ── Silent mode warning on background ──────────────────────────────────────
+  // Fire once per session when the app goes to background with watch active.
+  // iOS Critical Alerts bypass the hardware mute switch, so the alarm WILL fire,
+  // but this notice prompts the user to check their volume before sleeping.
+  // Android handles this via notification channels (bypassDnd) — no extra prompt needed.
+
+  const silentCheckRef = useRef(false); // reset each time app returns to foreground
+
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const sub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState !== 'background') {
+        silentCheckRef.current = false;
+        return;
+      }
+      if (silentCheckRef.current) return;
+      silentCheckRef.current = true;
+
+      const state = useAnchorStore.getState();
+      if (!state.isWatchActive || !state.alarmsEnabled) return;
+
+      const Notifications = await import('expo-notifications');
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '⚠️ Check phone volume',
+          body: 'Anchor watch is active. Make sure your phone is not on silent — the alarm must be audible.',
+          sound: undefined,
+          priority: 'high' as any,
+        },
+        trigger: null,
+      });
+    });
+
+    return () => sub.remove();
+  }, []);
+
   const {
     anchorPosition,
     boatPosition,
@@ -335,6 +625,8 @@ export default function HomeScreen() {
     setCustomZone,
     cancelAlarm,
     setSelectedHistoryIndex,
+    isPremium,
+    lastAnchorPosition,
   } = useAnchorStore();
 
   // Pulse animation for emergency banner — declared after alarmLevel is available
@@ -377,10 +669,21 @@ export default function HomeScreen() {
 
   const dropAnchor = (coord: { latitude: number; longitude: number }) => {
     setAnchorPosition(coord);
-    setWatchActive(true);
     setShowDropMenu(false);
     setTapToPlace(false);
+    // Show radius panel so user can confirm radius before watch starts
+    setActivePanel('radius');
+  };
+
+  const handleConfirmAnchor = () => {
+    setWatchActive(true);
     setActivePanel('none');
+    recordActivation();
+  };
+
+  const handleDropAtLastPosition = () => {
+    if (!lastAnchorPosition) return;
+    dropAnchor({ latitude: lastAnchorPosition.latitude, longitude: lastAnchorPosition.longitude });
   };
 
   const handleDropAtGps = () => {
@@ -483,7 +786,7 @@ export default function HomeScreen() {
       {nightMode && <View style={styles.nightOverlay} pointerEvents="none" />}
 
       {/* MAP */}
-      <View style={styles.mapContainer}>
+      <View ref={tourRefs.mapRoot} style={styles.mapContainer}>
         <RadarMap
           onLongPress={handleMapLongPress}
           onMapPress={tapToPlace ? handleMapTapPlace : undefined}
@@ -491,6 +794,7 @@ export default function HomeScreen() {
           drawnPoints={drawnPoints}
           onAddPoint={handleAddPoint}
           onUpdatePoint={handleUpdatePoint}
+          tourActive={showTour}
         />
 
         {/* Top-left: GPS signal strength + night mode toggle */}
@@ -511,18 +815,21 @@ export default function HomeScreen() {
         {/* Top-right: drop button (hidden once anchor is placed, hidden in drawing mode) */}
         {!anchorPosition && !isDrawingZone && (
           <TouchableOpacity
+            ref={tourRefs.drop}
             style={styles.dropBtn}
             onPress={() => { setTapToPlace(false); setShowDropMenu(true); }}
           >
-            <Ionicons name="anchor" size={14} color="#0a1628" />
+            <Image source={require('../assets/images/anchor-icon.png')} style={{ width: 16, height: 16, tintColor: '#0a1628' }} resizeMode="contain" />
             <Text style={styles.dropBtnText}>DROP ANCHOR</Text>
           </TouchableOpacity>
         )}
 
         {/* Lift anchor — shown in top-right once anchor is placed, hidden in drawing mode */}
         {anchorPosition && !isDrawingZone && (
-          <TouchableOpacity style={styles.liftBtn} onPress={handleLiftAnchor}>
-            <Ionicons name="arrow-up-circle-outline" size={14} color="#ef4444" />
+          <TouchableOpacity style={styles.liftBtn} onPress={handleLiftAnchor} activeOpacity={0.85}>
+            <View style={styles.liftBtnIcon}>
+              <Ionicons name="arrow-up" size={14} color="#ffffff" />
+            </View>
             <Text style={styles.liftBtnText}>LIFT ANCHOR</Text>
           </TouchableOpacity>
         )}
@@ -537,6 +844,15 @@ export default function HomeScreen() {
             <View style={styles.dropMenuCard}>
               <Text style={styles.dropMenuHeading}>HOW TO DROP ANCHOR</Text>
 
+              {lastAnchorPosition && (
+                <TouchableOpacity style={[styles.dropOption, styles.dropOptionLast]} onPress={handleDropAtLastPosition}>
+                  <Text style={styles.dropOptionTitle}>LAST ANCHOR POSITION</Text>
+                  <Text style={styles.dropOptionSub}>
+                    {`${Math.abs(lastAnchorPosition.latitude).toFixed(5)}°${lastAnchorPosition.latitude >= 0 ? 'N' : 'S'}  ${Math.abs(lastAnchorPosition.longitude).toFixed(5)}°${lastAnchorPosition.longitude >= 0 ? 'E' : 'W'}`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity style={styles.dropOption} onPress={handleDropAtGps}>
                 <Text style={styles.dropOptionTitle}>CURRENT GPS POSITION</Text>
                 <Text style={styles.dropOptionSub}>Drop anchor at your current location</Text>
@@ -549,6 +865,16 @@ export default function HomeScreen() {
                 <Text style={styles.dropOptionTitle}>RELATIVE POSITION</Text>
                 <Text style={styles.dropOptionSub}>
                   Anchor is X metres in a given direction from you
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.dropOption}
+                onPress={() => { setShowDropMenu(false); setActivePanel('coordInput'); }}
+              >
+                <Text style={styles.dropOptionTitle}>ENTER COORDINATES</Text>
+                <Text style={styles.dropOptionSub}>
+                  Chartplotter format, e.g. 33° 51.234&apos; S, 151° 12.567&apos; E
                 </Text>
               </TouchableOpacity>
 
@@ -601,6 +927,9 @@ export default function HomeScreen() {
         )}
       </View>
 
+      {/* Floating bottom overlay — controls sit over the satellite map */}
+      <View style={styles.bottomFloat} pointerEvents="box-none">
+
       {/* In-app alarm banner — alert and emergency only */}
       {isWatchActive && anchorPosition && (alarmLevel === 'alert' || alarmLevel === 'emergency') && (
         <Animated.View
@@ -650,89 +979,150 @@ export default function HomeScreen() {
       {/* BOTTOM CONTROLS — hidden in drawing mode */}
       {!isDrawingZone && <View style={styles.bottomBar}>
 
-        {/* Watch toggle — full width hero button when anchor is placed */}
-        {anchorPosition && (
-          <View style={styles.watchRow}>
-            <TouchableOpacity
-              style={[
-                styles.watchToggle,
-                isWatchActive
-                  ? (alarmLevel !== 'silent' ? styles.watchOnAlarm : styles.watchOn)
-                  : styles.watchOff,
-              ]}
-              onPress={() => setWatchActive(!isWatchActive)}
-            >
-              {isWatchActive && anchorPosition && boatPosition ? (
-                <>
-                  <Text style={styles.watchHeroNum}>{distText}</Text>
-                  <Text style={styles.watchHeroBearing}>{bearingToCardinal(currentBearing)}  {Math.round(currentBearing)}°</Text>
-                  <Text style={styles.watchHeroSub}>WATCH ACTIVE · tap to disable</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.watchToggleText}>
-                    {isWatchActive ? 'ANCHOR WATCH ACTIVE' : 'ANCHOR WATCH OFF'}
+        {/* Unified control card — watch status + tool row */}
+        <View style={styles.controlCard}>
+
+          {/* Watch status row — shown once an anchor is placed (or during the tour) */}
+          {(anchorPosition || showTour) && (
+            <>
+              <View style={styles.watchRow}>
+                <TouchableOpacity
+                  ref={tourRefs.watchToggle}
+                  style={styles.watchStatus}
+                  onPress={() => setWatchActive(!isWatchActive)}
+                  activeOpacity={0.8}
+                >
+                  <View
+                    style={[
+                      styles.watchShield,
+                      isWatchActive
+                        ? (alarmLevel !== 'silent' ? styles.watchShieldAlarm : styles.watchShieldOn)
+                        : styles.watchShieldOff,
+                    ]}
+                  >
+                    {!isWatchActive ? (
+                      // Watch off — red shield with a cross
+                      <>
+                        <Ionicons name="shield" size={26} color="#ef4444" />
+                        <View style={styles.shieldMarkOverlay} pointerEvents="none">
+                          <Ionicons name="close" size={13} color="#ffffff" />
+                        </View>
+                      </>
+                    ) : alarmLevel !== 'silent' ? (
+                      // Watch on but alarming
+                      <Ionicons name="warning" size={22} color="#ef4444" />
+                    ) : (
+                      // Watch on and safe — green shield with a tick
+                      <Ionicons name="shield-checkmark" size={22} color="#10b981" />
+                    )}
+                  </View>
+
+                  {isWatchActive && boatPosition ? (
+                    <View style={styles.watchTextBlock}>
+                      <View style={styles.watchHeroRow}>
+                        <Text style={styles.watchHeroNum}>{distText}</Text>
+                        <Text style={styles.watchHeroBearing}>{bearingToCardinal(currentBearing)} {Math.round(currentBearing)}°</Text>
+                      </View>
+                      <Text style={styles.watchStatusSub}>WATCH ACTIVE · tap to disable</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.watchTextBlock}>
+                      <Text style={styles.watchStatusTitle}>
+                        {isWatchActive ? 'ANCHOR WATCH ACTIVE' : 'ANCHOR WATCH OFF'}
+                      </Text>
+                      <Text style={styles.watchStatusSub}>
+                        {isWatchActive ? 'Waiting for GPS…' : 'Tap to enable alarm'}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Track record / pause toggle */}
+                <TouchableOpacity
+                  style={[styles.recBtn, isTrackingPaused && styles.recBtnPaused]}
+                  onPress={handleTrackPause}
+                  activeOpacity={0.8}
+                >
+                  {isTrackingPaused
+                    ? <Ionicons name="play" size={15} color="#94a3b8" />
+                    : <View style={styles.recDot} />}
+                  <Text style={[styles.recLabel, isTrackingPaused && styles.recLabelPaused]}>
+                    {isTrackingPaused ? 'PAUSED' : 'REC'}
                   </Text>
-                  <Text style={styles.watchToggleSub}>
-                    {isWatchActive ? 'waiting for GPS…' : 'tap to enable alarm'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-            {/* Track pause — small icon + label button */}
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.cardDivider} />
+            </>
+          )}
+
+          {/* Tool buttons */}
+          <View style={styles.toolRow}>
             <TouchableOpacity
-              style={[styles.trackPauseBtn, isTrackingPaused && styles.trackPauseBtnPaused]}
-              onPress={handleTrackPause}
+              ref={tourRefs.radius}
+              style={styles.toolBtn}
+              onPress={() => togglePanel('radius')}
             >
               <Ionicons
-                name={isTrackingPaused ? 'play-outline' : 'pause-outline'}
-                size={18}
-                color={isTrackingPaused ? '#ef4444' : '#475569'}
+                name="radio-button-on-outline"
+                size={22}
+                color={activePanel === 'radius' ? '#2dd4bf' : '#64748b'}
               />
-              <Text style={[styles.trackPauseLabel, isTrackingPaused && styles.trackPauseLabelPaused]}>
-                {isTrackingPaused ? 'PAUSED' : 'REC'}
-              </Text>
+              <Text style={[styles.toolLabel, activePanel === 'radius' && styles.toolLabelActive]}>RADIUS</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              ref={tourRefs.history}
+              style={styles.toolBtn}
+              onPress={() => isPremium ? togglePanel('playback') : Alert.alert(
+                'GPS Track History',
+                'Replay your boat\'s position throughout the night on a colour-coded track, with a scrubber to jump to any moment.',
+                [{ text: 'Not now', style: 'cancel' }, { text: 'Go Premium', onPress: () => router.push('/upgrade') }]
+              )}
+            >
+              <Ionicons
+                name={isPremium ? 'time-outline' : 'lock-closed-outline'}
+                size={22}
+                color={activePanel === 'playback' ? '#2dd4bf' : '#64748b'}
+              />
+              <Text style={[styles.toolLabel, activePanel === 'playback' && styles.toolLabelActive]}>HISTORY</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              ref={tourRefs.watchTab}
+              style={styles.toolBtn}
+              onPress={() => isPremium ? router.push('/remote') : Alert.alert(
+                'Remote Watch',
+                'Share a live link so someone ashore can see your anchor position and alarm status in real time.',
+                [{ text: 'Not now', style: 'cancel' }, { text: 'Go Premium', onPress: () => router.push('/upgrade') }]
+              )}
+            >
+              <Ionicons name={isPremium ? 'eye-outline' : 'lock-closed-outline'} size={22} color="#64748b" />
+              <Text style={styles.toolLabel}>WATCH</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              ref={tourRefs.settings}
+              style={styles.toolBtn}
+              onPress={() => router.push('/settings')}
+            >
+              <Ionicons name="settings-outline" size={22} color="#64748b" />
+              <Text style={styles.toolLabel}>SETTINGS</Text>
             </TouchableOpacity>
           </View>
-        )}
-
-        {/* Tool buttons */}
-        <View style={styles.toolRow}>
-          <TouchableOpacity
-            style={[styles.toolBtn, activePanel === 'radius' && styles.toolBtnActive]}
-            onPress={() => togglePanel('radius')}
-          >
-            <Ionicons
-              name="radio-button-on-outline"
-              size={20}
-              color={activePanel === 'radius' ? '#C9A227' : '#64748b'}
-            />
-            <Text style={[styles.toolLabel, activePanel === 'radius' && styles.toolLabelActive]}>RADIUS</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.toolBtn, activePanel === 'playback' && styles.toolBtnActive]}
-            onPress={() => togglePanel('playback')}
-          >
-            <Ionicons
-              name="time-outline"
-              size={20}
-              color={activePanel === 'playback' ? '#C9A227' : '#64748b'}
-            />
-            <Text style={[styles.toolLabel, activePanel === 'playback' && styles.toolLabelActive]}>HISTORY</Text>
-          </TouchableOpacity>
-
-
-          <TouchableOpacity
-            style={styles.toolBtn}
-            onPress={() => router.push('/settings')}
-          >
-            <Ionicons name="settings-outline" size={20} color="#64748b" />
-            <Text style={styles.toolLabel}>SETTINGS</Text>
-          </TouchableOpacity>
         </View>
 
-        {activePanel === 'radius' && <RadiusControl onDrawZone={handleStartDrawing} />}
+        {activePanel === 'radius' && (
+          <>
+            <RadiusControl onDrawZone={handleStartDrawing} />
+            {anchorPosition && !isWatchActive && (
+              <TouchableOpacity style={styles.startWatchBtn} onPress={handleConfirmAnchor}>
+                <Ionicons name="shield-checkmark-outline" size={18} color="#0a1628" />
+                <Text style={styles.startWatchBtnText}>START WATCH</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        )}
         {activePanel === 'playback' && <TimeSlider />}
         {activePanel === 'relativeAnchor' && (
           <RelativeAnchorPanel
@@ -744,7 +1134,15 @@ export default function HomeScreen() {
             onCancel={() => setActivePanel('none')}
           />
         )}
+        {activePanel === 'coordInput' && (
+          <CoordinateInputPanel
+            onDrop={(coord) => { dropAnchor(coord); setActivePanel('none'); }}
+            onCancel={() => setActivePanel('none')}
+          />
+        )}
       </View>}
+
+      </View>
 
       {/* Track pause toast */}
       {trackToast !== null && (
@@ -767,6 +1165,13 @@ export default function HomeScreen() {
 
       {/* App tour overlay — shown once after first launch */}
       <AppTour visible={showTour} onDone={handleTourDone} />
+
+      {/* Review prompt — shown after 3rd watch activation, then weekly up to 4 times */}
+      <ReviewPromptModal
+        visible={showPrompt}
+        onYes={handleEnjoyingApp}
+        onNo={handleNotEnjoyingApp}
+      />
     </View>
   );
 }
@@ -798,9 +1203,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#C9A22720', borderColor: '#C9A227',
   },
 
-  // Drop anchor button — top right, below map compass
+  // Drop anchor button — top right
   dropBtn: {
-    position: 'absolute', top: 56, right: 12,
+    position: 'absolute', top: 12, right: 12,
     backgroundColor: '#C9A227', borderRadius: 10,
     paddingVertical: 9, paddingHorizontal: 14,
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -809,13 +1214,20 @@ const styles = StyleSheet.create({
 
   // Lift anchor — top right, replaces drop button when anchor is placed
   liftBtn: {
-    position: 'absolute', top: 56, right: 12,
-    backgroundColor: '#1a0505cc', borderRadius: 10,
-    paddingVertical: 9, paddingHorizontal: 14,
-    borderWidth: 1, borderColor: '#ef444477',
-    flexDirection: 'row', alignItems: 'center', gap: 6,
+    position: 'absolute', top: 12, right: 12,
+    backgroundColor: '#190a0eee', borderRadius: 22,
+    paddingVertical: 6, paddingLeft: 6, paddingRight: 15,
+    borderWidth: 1, borderColor: '#ef444455',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 }, elevation: 4,
   },
-  liftBtnText: { color: '#ef4444', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+  liftBtnIcon: {
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: '#ef4444',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  liftBtnText: { color: '#fecaca', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
 
   // Drop anchor menu
   menuBackdrop: { backgroundColor: '#04080fbb' },
@@ -827,45 +1239,95 @@ const styles = StyleSheet.create({
     padding: 20, gap: 12,
   },
   dropMenuHeading: {
-    color: '#475569', fontSize: 11, fontWeight: '700',
+    color: '#94a3b8', fontSize: 11, fontWeight: '700',
     letterSpacing: 2, marginBottom: 4,
   },
   dropOption: {
     backgroundColor: '#0f2040', borderRadius: 12,
     padding: 14, borderWidth: 1, borderColor: '#1e3a6e', gap: 4,
   },
-  dropOptionTitle: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
-  dropOptionSub: { color: '#64748b', fontSize: 12 },
-
-  // Bottom bar
-  bottomBar: {
-    backgroundColor: '#04080f', borderTopWidth: 1, borderTopColor: '#1a2d4a',
-    paddingTop: 10, paddingBottom: 8, gap: 8,
+  dropOptionLast: {
+    borderColor: '#C9A22744', backgroundColor: '#C9A22710',
   },
-  watchRow: { flexDirection: 'row', marginHorizontal: 16, gap: 8, alignItems: 'stretch' },
-  watchToggle: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  watchOn: { backgroundColor: '#10b981' },
-  watchOff: { backgroundColor: '#0f2040', borderWidth: 1, borderColor: '#1e3a6e' },
-  watchToggleText: { color: '#f1f5f9', fontSize: 14, fontWeight: '700', letterSpacing: 1 },
-  watchToggleSub: { color: '#f1f5f9aa', fontSize: 10, marginTop: 3, letterSpacing: 0.5 },
-  trackPauseBtn: {
-    width: 48,
-    borderRadius: 12,
+  dropOptionTitle: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  dropOptionSub: { color: '#94a3b8', fontSize: 12 },
+
+  // Floating bottom overlay — lets the satellite map show through behind the controls
+  bottomFloat: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+  },
+  // Bottom bar — transparent so the map is visible behind the rounded control card
+  bottomBar: {
+    paddingTop: 10, paddingBottom: 24, gap: 8,
+  },
+  // Unified control card grouping the watch status + tool row
+  controlCard: {
+    marginHorizontal: 16,
+    backgroundColor: '#0a1628d9',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#1c3358',
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#16294a',
+    marginHorizontal: 8,
+  },
+
+  // Watch status row
+  watchRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10 },
+  watchStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  watchShield: {
+    width: 44, height: 44, borderRadius: 22,
+    borderWidth: 1.5, alignItems: 'center', justifyContent: 'center',
+  },
+  watchShieldOff: { borderColor: '#ef444466', backgroundColor: '#ef444414' },
+  watchShieldOn: { borderColor: '#10b98166', backgroundColor: '#10b98114' },
+  watchShieldAlarm: { borderColor: '#ef444466', backgroundColor: '#ef444414' },
+  shieldMarkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center', marginTop: 1,
+  },
+  watchTextBlock: { flex: 1, gap: 2 },
+  watchStatusTitle: { color: '#f1f5f9', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
+  watchStatusSub: { color: '#94a3b8', fontSize: 13 },
+  watchHeroRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+
+  // REC / pause toggle
+  recBtn: {
+    minWidth: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#0f2040',
     borderWidth: 1,
     borderColor: '#1e3a6e',
+    gap: 3,
   },
-  trackPauseBtnPaused: { borderColor: '#ef444466', backgroundColor: '#ef444411' },
-  trackPauseLabel: {
-    color: '#475569',
-    fontSize: 8,
+  recBtnPaused: { borderColor: '#ef444455', backgroundColor: '#ef444411' },
+  recDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#ef4444' },
+  recLabel: { color: '#ef4444', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  recLabelPaused: { color: '#94a3b8' },
+  startWatchBtn: {
+    backgroundColor: '#C9A227',
+    borderRadius: 10,
+    paddingVertical: 15,
+    marginHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  startWatchBtnText: {
+    color: '#0a1628',
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.5,
-    marginTop: 2,
+    letterSpacing: 1.5,
   },
-  trackPauseLabelPaused: { color: '#ef4444' },
   trackToast: {
     position: 'absolute',
     bottom: 100,
@@ -881,7 +1343,7 @@ const styles = StyleSheet.create({
     borderColor: '#1e3a6e',
   },
   trackToastText: {
-    color: '#f1f5f9',
+    color: '#e2e8f0',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -940,7 +1402,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   drawingTitle: { color: '#3b82f6', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
-  drawingHint: { color: '#64748b', fontSize: 12, marginTop: 2 },
+  drawingHint: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
   drawingActions: { flexDirection: 'row', gap: 8 },
   drawActionBtn: {
     flex: 1,
@@ -952,46 +1414,33 @@ const styles = StyleSheet.create({
     borderColor: '#1e3a6e',
   },
   drawActionBtnDisabled: { opacity: 0.35 },
-  drawActionText: { color: '#94a3b8', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
-  drawActionTextDisabled: { color: '#475569' },
+  drawActionText: { color: '#e2e8f0', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  drawActionTextDisabled: { color: '#94a3b8' },
   drawCancelBtn: { borderColor: '#334155' },
-  drawCancelText: { color: '#64748b' },
+  drawCancelText: { color: '#94a3b8' },
   drawDoneBtn: { flex: 2, backgroundColor: '#162d57', borderColor: '#3b82f6' },
   drawDoneText: { color: '#3b82f6' },
 
-  toolRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 6 },
+  // Tool row — borderless icon + label, evenly spaced inside the control card
+  toolRow: { flexDirection: 'row', paddingVertical: 4, paddingHorizontal: 2 },
   toolBtn: {
-    flex: 1, backgroundColor: '#0a1628', borderRadius: 10,
-    paddingVertical: 9, alignItems: 'center',
-    borderWidth: 1, borderColor: '#1a2d4a', gap: 4,
+    flex: 1, alignItems: 'center',
+    paddingVertical: 10, gap: 6,
   },
-  toolBtnActive: { borderColor: '#C9A22766', backgroundColor: '#C9A22710' },
-  toolLabel: { color: '#475569', fontSize: 9, fontWeight: '700', letterSpacing: 1 },
-  toolLabelActive: { color: '#C9A227' },
+  toolLabel: { color: '#94a3b8', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
+  toolLabelActive: { color: '#2dd4bf' },
 
-  // Watch toggle alarm states
-  watchOnAlarm: { backgroundColor: '#ef4444' },
-
-  // Hero distance/bearing display inside watch toggle
+  // Hero distance/bearing display inside the watch status row
   watchHeroNum: {
     color: '#FFFFFF',
-    fontSize: 40,
+    fontSize: 30,
     fontWeight: '800',
-    letterSpacing: -1,
-    lineHeight: 44,
+    letterSpacing: -0.5,
   },
   watchHeroBearing: {
-    color: '#FFFFFFCC',
-    fontSize: 14,
+    color: '#94a3b8',
+    fontSize: 13,
     fontWeight: '600',
-    letterSpacing: 2,
-    marginTop: -2,
-  },
-  watchHeroSub: {
-    color: '#FFFFFFAA',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 2,
-    marginTop: 6,
+    letterSpacing: 1,
   },
 });

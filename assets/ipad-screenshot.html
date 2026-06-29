@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 2048px;
+    height: 2732px;
+    background: #0C1B2C;
+    font-family: -apple-system, 'SF Pro Display', sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Map background ── */
+  .map {
+    position: absolute;
+    inset: 0;
+    background: #0e2340;
+    overflow: hidden;
+  }
+
+  /* Subtle grid lines to suggest chart */
+  .map::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(30,58,110,0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30,58,110,0.4) 1px, transparent 1px);
+    background-size: 120px 120px;
+  }
+
+  /* Water texture blobs */
+  .water-blob {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(14, 42, 80, 0.6);
+    filter: blur(80px);
+  }
+
+  /* Depth contour rings on map */
+  .contour {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(30, 58, 110, 0.5);
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Watch radius circle ── */
+  .radius-ring {
+    position: absolute;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .radius-outer {
+    width: 700px; height: 700px;
+    border: 3px solid rgba(16, 185, 129, 0.35);
+    background: rgba(16, 185, 129, 0.04);
+  }
+  .radius-main {
+    width: 620px; height: 620px;
+    border: 4px solid #10b981;
+    background: rgba(16, 185, 129, 0.06);
+    box-shadow: 0 0 60px rgba(16,185,129,0.15), inset 0 0 60px rgba(16,185,129,0.05);
+  }
+
+  /* Distance rings */
+  .dist-ring {
+    position: absolute;
+    border-radius: 50%;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border: 1px dashed rgba(201,162,39,0.2);
+  }
+
+  /* ── Anchor icon ── */
+  .anchor-point {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .anchor-icon {
+    width: 72px; height: 72px;
+    background: #C9A227;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 40px rgba(201,162,39,0.5);
+    font-size: 36px;
+  }
+
+  /* ── Boat position ── */
+  .boat-point {
+    position: absolute;
+    top: calc(50% + 180px);
+    left: calc(50% + 120px);
+    transform: translate(-50%, -50%);
+  }
+  .boat-dot {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: #60a5fa;
+    border: 3px solid #fff;
+    box-shadow: 0 0 20px rgba(96,165,250,0.6);
+  }
+
+  /* GPS track line */
+  .track-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  /* ── Header bar ── */
+  .header {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 120px;
+    background: rgba(10, 22, 40, 0.92);
+    border-bottom: 1px solid rgba(30,58,110,0.8);
+    display: flex;
+    align-items: center;
+    padding: 0 60px;
+    gap: 40px;
+    backdrop-filter: blur(20px);
+  }
+  .logo-text {
+    font-size: 38px;
+    font-weight: 900;
+    color: #C9A227;
+    letter-spacing: 6px;
+  }
+  .logo-sub {
+    font-size: 20px;
+    color: #475569;
+    letter-spacing: 3px;
+    font-weight: 600;
+  }
+  .header-spacer { flex: 1; }
+  .status-pill {
+    display: flex; align-items: center; gap: 12px;
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.4);
+    border-radius: 40px;
+    padding: 12px 28px;
+  }
+  .status-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 12px #10b981;
+    animation: pulse 2s infinite;
+  }
+  .status-text { color: #10b981; font-size: 22px; font-weight: 800; letter-spacing: 2px; }
+  .gps-pill {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(30,58,110,0.5);
+    border: 1px solid rgba(30,58,110,0.8);
+    border-radius: 40px;
+    padding: 12px 24px;
+  }
+  .gps-text { color: #64748b; font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+  .gps-val { color: #f1f5f9; font-size: 20px; font-weight: 700; }
+
+  /* ── Bottom panel ── */
+  .bottom-panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(10, 22, 40, 0.96);
+    border-top: 1px solid rgba(30,58,110,0.8);
+    backdrop-filter: blur(20px);
+    padding: 40px 60px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: flex;
+    gap: 24px;
+  }
+  .stat-card {
+    flex: 1;
+    background: #0f2040;
+    border-radius: 20px;
+    border: 1px solid #1e3a6e;
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .stat-label { color: #475569; font-size: 18px; font-weight: 700; letter-spacing: 2px; }
+  .stat-value { color: #f1f5f9; font-size: 42px; font-weight: 800; line-height: 1; }
+  .stat-unit { color: #64748b; font-size: 22px; font-weight: 600; }
+  .stat-value.green { color: #10b981; }
+  .stat-value.gold { color: #C9A227; }
+
+  /* Watch button */
+  .watch-btn {
+    background: #ef4444;
+    border-radius: 20px;
+    padding: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    box-shadow: 0 8px 40px rgba(239,68,68,0.3);
+  }
+  .watch-icon { font-size: 44px; }
+  .watch-label { color: white; font-size: 36px; font-weight: 900; letter-spacing: 4px; }
+  .watch-sub { color: rgba(255,255,255,0.6); font-size: 20px; font-weight: 600; letter-spacing: 1px; }
+
+  /* Tool buttons */
+  .tools-row {
+    display: flex;
+    gap: 20px;
+  }
+  .tool-btn {
+    flex: 1;
+    background: #0f2040;
+    border: 1px solid #1e3a6e;
+    border-radius: 16px;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+  .tool-icon { font-size: 32px; }
+  .tool-label { color: #64748b; font-size: 16px; font-weight: 700; letter-spacing: 1.5px; }
+
+  /* ── Side panel (iPad extra space) ── */
+  .side-panel {
+    position: absolute;
+    top: 140px;
+    right: 60px;
+    width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .info-card {
+    background: rgba(10, 22, 40, 0.9);
+    border: 1px solid #1e3a6e;
+    border-radius: 20px;
+    padding: 28px 32px;
+    backdrop-filter: blur(20px);
+  }
+  .info-card-title {
+    color: #475569;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #1e3a6e;
+  }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(30,58,110,0.4);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-key { color: #64748b; font-size: 18px; font-weight: 600; }
+  .info-val { color: #f1f5f9; font-size: 18px; font-weight: 700; }
+  .info-val.green { color: #10b981; }
+  .info-val.gold { color: #C9A227; }
+  .info-val.blue { color: #60a5fa; }
+
+  /* Alarm levels card */
+  .alarm-level {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(30,58,110,0.4);
+  }
+  .alarm-level:last-child { border-bottom: none; }
+  .alarm-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .alarm-name { color: #94a3b8; font-size: 18px; font-weight: 600; flex: 1; }
+  .alarm-trigger { color: #475569; font-size: 16px; }
+
+  /* ── Feature callout strip ── */
+  .callout-strip {
+    position: absolute;
+    top: 140px; left: 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 340px;
+  }
+  .callout {
+    background: rgba(10,22,40,0.88);
+    border: 1px solid rgba(201,162,39,0.3);
+    border-radius: 14px;
+    padding: 18px 22px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .callout-icon { font-size: 26px; flex-shrink: 0; }
+  .callout-text { color: #C9A227; font-size: 18px; font-weight: 700; line-height: 1.3; }
+
+</style>
+</head>
+<body>
+
+  <!-- Map background -->
+  <div class="map">
+    <div class="water-blob" style="width:900px;height:600px;top:-100px;left:-200px;"></div>
+    <div class="water-blob" style="width:700px;height:700px;bottom:300px;right:-100px;background:rgba(12,27,44,0.8)"></div>
+
+    <!-- Depth contours -->
+    <div class="contour" style="width:1400px;height:1400px;border-color:rgba(30,58,110,0.3)"></div>
+    <div class="contour" style="width:1100px;height:1100px;border-color:rgba(30,58,110,0.25)"></div>
+    <div class="contour" style="width:800px;height:800px;border-color:rgba(30,58,110,0.2)"></div>
+
+    <!-- Distance rings -->
+    <div class="dist-ring" style="width:200px;height:200px;"></div>
+    <div class="dist-ring" style="width:400px;height:400px;"></div>
+    <div class="dist-ring" style="width:850px;height:850px;"></div>
+    <div class="dist-ring" style="width:1050px;height:1050px;"></div>
+
+    <!-- GPS track -->
+    <svg class="track-svg" viewBox="0 0 2048 2732" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="trackGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:#1e3a6e;stop-opacity:0.4"/>
+          <stop offset="100%" style="stop-color:#60a5fa;stop-opacity:0.9"/>
+        </linearGradient>
+      </defs>
+      <polyline
+        points="900,1400 940,1380 980,1350 1020,1320 1060,1310 1100,1290 1140,1280 1168,1266"
+        fill="none"
+        stroke="url(#trackGrad)"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+
+    <!-- Radius rings -->
+    <div class="radius-ring radius-outer"></div>
+    <div class="radius-ring radius-main"></div>
+
+    <!-- Anchor -->
+    <div class="anchor-point">
+      <div class="anchor-icon">⚓</div>
+    </div>
+
+    <!-- Boat -->
+    <div class="boat-point">
+      <div class="boat-dot"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="logo-text">HOLDFAST</div>
+      <div class="logo-sub">ANCHOR ALARM</div>
+    </div>
+    <div class="header-spacer"></div>
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <div class="status-text">WATCHING</div>
+    </div>
+    <div class="gps-pill">
+      <div class="gps-text">GPS</div>
+      <div class="gps-val">±2m</div>
+    </div>
+    <div class="gps-pill">
+      <div class="gps-text">DIST</div>
+      <div class="gps-val" style="color:#10b981">42m</div>
+    </div>
+  </div>
+
+  <!-- Feature callouts (left side, over map) -->
+  <div class="callout-strip">
+    <div class="callout">
+      <div class="callout-icon">📍</div>
+      <div class="callout-text">Drop anchor with one tap or long-press on the map</div>
+    </div>
+    <div class="callout">
+      <div class="callout-icon">🔔</div>
+      <div class="callout-text">Alarm bypasses Silent Mode and Do Not Disturb</div>
+    </div>
+    <div class="callout">
+      <div class="callout-icon">🛰</div>
+      <div class="callout-text">Background GPS keeps watching while you sleep</div>
+    </div>
+    <div class="callout">
+      <div class="callout-icon">📡</div>
+      <div class="callout-text">Remote Watch — let crew ashore monitor live</div>
+    </div>
+  </div>
+
+  <!-- Side panel (right side) -->
+  <div class="side-panel">
+    <div class="info-card">
+      <div class="info-card-title">ANCHOR STATUS</div>
+      <div class="info-row">
+        <div class="info-key">Distance from anchor</div>
+        <div class="info-val green">42 m</div>
+      </div>
+      <div class="info-row">
+        <div class="info-key">Watch radius</div>
+        <div class="info-val gold">75 m</div>
+      </div>
+      <div class="info-row">
+        <div class="info-key">Bearing to anchor</div>
+        <div class="info-val blue">287°</div>
+      </div>
+      <div class="info-row">
+        <div class="info-key">GPS accuracy</div>
+        <div class="info-val green">±2 m</div>
+      </div>
+      <div class="info-row">
+        <div class="info-key">Track recorded</div>
+        <div class="info-val">3.2 hours</div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-title">ALARM LEVELS</div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#10b981;box-shadow:0 0 8px #10b981"></div>
+        <div class="alarm-name">Safe</div>
+        <div class="alarm-trigger">Inside radius</div>
+      </div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#f97316;box-shadow:0 0 8px #f97316"></div>
+        <div class="alarm-name">Alert</div>
+        <div class="alarm-trigger">Boundary reached</div>
+      </div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#ef4444;box-shadow:0 0 8px #ef4444"></div>
+        <div class="alarm-name">Emergency</div>
+        <div class="alarm-trigger">Well past boundary</div>
+      </div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#a855f7;box-shadow:0 0 8px #a855f7"></div>
+        <div class="alarm-name">GPS Lost</div>
+        <div class="alarm-trigger">No fix detected</div>
+      </div>
+    </div>
+
+    <div class="info-card" style="border-color:rgba(201,162,39,0.4);background:rgba(201,162,39,0.05)">
+      <div class="info-card-title" style="color:#C9A227;border-color:rgba(201,162,39,0.2)">HOLDFAST PREMIUM</div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#C9A227"></div>
+        <div class="alarm-name" style="color:#C9A227">GPS Track History</div>
+      </div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#C9A227"></div>
+        <div class="alarm-name" style="color:#C9A227">Custom Alarm Sounds</div>
+      </div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#C9A227"></div>
+        <div class="alarm-name" style="color:#C9A227">Remote Watch</div>
+      </div>
+      <div class="alarm-level">
+        <div class="alarm-dot" style="background:#C9A227"></div>
+        <div class="alarm-name" style="color:#C9A227">Custom Zone Drawing</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom panel -->
+  <div class="bottom-panel">
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">DISTANCE</div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div class="stat-value green">42</div>
+          <div class="stat-unit">m</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">RADIUS</div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div class="stat-value gold">75</div>
+          <div class="stat-unit">m</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">BEARING</div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <div class="stat-value" style="color:#60a5fa">287</div>
+          <div class="stat-unit">°</div>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">GPS FIX</div>
+        <div class="stat-value green" style="font-size:32px;padding-top:4px">LOCKED</div>
+      </div>
+
+      <!-- Watch button -->
+      <div style="flex:2">
+        <div class="watch-btn">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <div class="watch-label">⏹ WATCHING</div>
+            <div class="watch-sub">TAP TO STOP</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tool buttons -->
+    <div class="tools-row">
+      <div class="tool-btn">
+        <div class="tool-icon">⚓</div>
+        <div class="tool-label">ANCHOR</div>
+      </div>
+      <div class="tool-btn">
+        <div class="tool-icon">📏</div>
+        <div class="tool-label">RADIUS</div>
+      </div>
+      <div class="tool-btn">
+        <div class="tool-icon">🕐</div>
+        <div class="tool-label" style="color:#C9A227">HISTORY</div>
+      </div>
+      <div class="tool-btn">
+        <div class="tool-icon">👁</div>
+        <div class="tool-label" style="color:#C9A227">WATCH</div>
+      </div>
+      <div class="tool-btn">
+        <div class="tool-icon">⚙️</div>
+        <div class="tool-label">SETTINGS</div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

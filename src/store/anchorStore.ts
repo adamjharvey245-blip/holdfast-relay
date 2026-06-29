@@ -12,7 +12,7 @@ import type {
   TideDataPoint,
 } from '@/types';
 
-const HISTORY_MAX_MS = 4 * 60 * 60 * 1000;
+const DEFAULT_RETENTION_HOURS = 4;
 const STORAGE_KEY = 'holdfast_state';
 
 const DEFAULT_THRESHOLDS: AlarmThresholds = {
@@ -67,6 +67,8 @@ interface AnchorActions {
   clearAnchor: () => void;
   updateBoatPosition: (coord: TimestampedCoordinate) => void;
   setWatchRadius: (radius: number) => void;
+  setWatchRadiusSilent: (radius: number) => void;
+  setAnchorPositionSilent: (coord: Coordinate) => void;
   setWatchActive: (active: boolean) => void;
   setTrackingPaused: (paused: boolean) => void;
   setCustomZone: (points: Coordinate[] | null) => void;
@@ -78,6 +80,9 @@ interface AnchorActions {
   setCurrentDistance: (distance: number) => void;
   setIsDragging: (dragging: boolean) => void;
   setWatchCode: (code: string | null) => void;
+  setRelayConnected: (connected: boolean) => void;
+  setRemoteWatchEnabled: (enabled: boolean) => void;
+  setIsPremium: (premium: boolean) => void;
   setSelectedHistoryIndex: (index: number | null) => void;
   useHistoryPositionAsAnchor: () => void;
   setAlarmThresholds: (t: Partial<AlarmThresholds>) => void;
@@ -86,6 +91,9 @@ interface AnchorActions {
   generateWatchCode: () => void;
   setAlarmsEnabled: (enabled: boolean) => void;
   setBatteryMode: (mode: BatteryMode) => void;
+  setRingLabelSpacingM: (spacing: number) => void;
+  setTrackRetentionHours: (hours: 2 | 4 | 12 | 24) => void;
+  clearTrack: () => void;
   setTideEnabled: (enabled: boolean) => void;
   setTideAutoMode: (auto: boolean) => void;
   setAnchorTideHeight: (height: number) => void;
@@ -97,6 +105,7 @@ type AnchorStore = AnchorState & AnchorActions;
 
 const initialState: AnchorState = {
   anchorPosition: null,
+  lastAnchorPosition: null,
   boatPosition: null,
   watchRadius: 30,
   customZone: null,
@@ -114,6 +123,9 @@ const initialState: AnchorState = {
   gpsLostAt: null,
   alarmThresholds: DEFAULT_THRESHOLDS,
   watchCode: null,
+  relayConnected: false,
+  remoteWatchEnabled: false,
+  isPremium: false,
   selectedHistoryIndex: null,
   tideEnabled: false,
   tideAutoMode: true,
@@ -125,13 +137,15 @@ const initialState: AnchorState = {
   tideDataLon: null,
   alarmsEnabled: true,
   batteryMode: 'precision' as BatteryMode,
+  ringLabelSpacingM: 10,
+  trackRetentionHours: 4 as 2 | 4 | 12 | 24,
 };
 
 export const useAnchorStore = create<AnchorStore>((set, get) => ({
   ...initialState,
 
   setAnchorPosition: (coord) => {
-    set({ anchorPosition: coord, selectedHistoryIndex: null, ...ALARM_RESET });
+    set({ anchorPosition: coord, lastAnchorPosition: coord, selectedHistoryIndex: null, ...ALARM_RESET });
     get().persistToStorage();
   },
 
@@ -143,12 +157,12 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   // ── updateBoatPosition ───────────────────────────────────────────────────
 
   updateBoatPosition: (coord) => {
-    const cutoff = Date.now() - HISTORY_MAX_MS;
     const state = get();
+    const cutoff = Date.now() - (state.trackRetentionHours ?? DEFAULT_RETENTION_HOURS) * 3_600_000;
 
     const base = {
       boatPosition: coord,
-      positionHistory: state.isTrackingPaused
+      positionHistory: (state.isTrackingPaused || !state.isPremium)
         ? state.positionHistory.filter((p) => p.timestamp > cutoff)
         : [...state.positionHistory.filter((p) => p.timestamp > cutoff), coord],
       gpsStatus: 'ok' as GpsStatus,
@@ -209,6 +223,29 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
     get().persistToStorage();
   },
 
+  // Same as setWatchRadius but skips AsyncStorage write — use during continuous drag events.
+  setWatchRadiusSilent: (radius) => {
+    const clampedRadius = Math.max(5, Math.min(500, radius));
+    const state = get();
+    if (state.isWatchActive && state.anchorPosition && state.gpsStatus !== 'lost') {
+      const er = computeEffectiveRadius(clampedRadius, state.tideEnabled, state.anchorTideHeight, state.currentTideHeight);
+      const newLevel = computeAlarmLevel(state.currentDistance, er, state.customZone, state.boatPosition, state.alarmThresholds.emergencyThresholdPct);
+      set({
+        watchRadius: clampedRadius,
+        alarmLevel: newLevel,
+        isDragging: newLevel !== 'silent',
+        ...(newLevel === 'silent' ? { draggingCancelledAt: null } : {}),
+      });
+    } else {
+      set({ watchRadius: clampedRadius });
+    }
+  },
+
+  // Updates anchor coordinate visually during drag — no alarm reset, no persist.
+  setAnchorPositionSilent: (coord) => {
+    set({ anchorPosition: coord });
+  },
+
   setWatchActive: (active) => {
     if (!active) {
       // Disabling watch — reset alarm state so alarm system stops sound/vibration
@@ -216,6 +253,7 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
     } else {
       set({ isWatchActive: true });
     }
+    get().persistToStorage();
   },
   setTrackingPaused: (paused) => set({ isTrackingPaused: paused }),
   setCustomZone: (points) => {
@@ -258,6 +296,23 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   setCurrentDistance: (distance) => set({ currentDistance: distance }),
   setIsDragging: (dragging) => set({ isDragging: dragging }),
   setWatchCode: (code) => set({ watchCode: code }),
+  setRelayConnected: (connected) => set({ relayConnected: connected }),
+  setIsPremium: (premium) => set({ isPremium: premium }),
+
+  setRemoteWatchEnabled: (enabled) => {
+    if (enabled) {
+      // Generate a code if one doesn't exist yet
+      const existing = get().watchCode;
+      if (!existing) {
+        set({ remoteWatchEnabled: true, watchCode: Math.floor(1000 + Math.random() * 9000).toString() });
+      } else {
+        set({ remoteWatchEnabled: true });
+      }
+    } else {
+      set({ remoteWatchEnabled: false, watchCode: null });
+    }
+    get().persistToStorage();
+  },
   setSelectedHistoryIndex: (index) => set({ selectedHistoryIndex: index }),
 
   useHistoryPositionAsAnchor: () => {
@@ -265,8 +320,10 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
     if (selectedHistoryIndex === null) return;
     const point = positionHistory[selectedHistoryIndex];
     if (!point) return;
+    const coord = { latitude: point.latitude, longitude: point.longitude };
     set({
-      anchorPosition: { latitude: point.latitude, longitude: point.longitude },
+      anchorPosition: coord,
+      lastAnchorPosition: coord,
       selectedHistoryIndex: null,
       ...ALARM_RESET,
     });
@@ -282,6 +339,7 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
 
   generateWatchCode: () => {
     set({ watchCode: Math.floor(1000 + Math.random() * 9000).toString() });
+    get().persistToStorage();
   },
 
   setAlarmsEnabled: (enabled) => {
@@ -292,6 +350,20 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   setBatteryMode: (mode) => {
     set({ batteryMode: mode });
     get().persistToStorage();
+  },
+
+  setRingLabelSpacingM: (spacing) => {
+    set({ ringLabelSpacingM: spacing });
+    get().persistToStorage();
+  },
+
+  setTrackRetentionHours: (hours) => {
+    set({ trackRetentionHours: hours });
+    get().persistToStorage();
+  },
+
+  clearTrack: () => {
+    set({ positionHistory: [], selectedHistoryIndex: null });
   },
 
   setTideEnabled: (enabled) => {
@@ -346,6 +418,7 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
       const saved_thresholds = saved.alarmThresholds ?? {};
       set({
         anchorPosition: saved.anchorPosition ?? null,
+        lastAnchorPosition: (saved as any).lastAnchorPosition ?? null,
         watchRadius: saved.watchRadius ?? 30,
         customZone: (saved as any).customZone ?? null,
         tideEnabled: (saved as any).tideEnabled ?? false,
@@ -354,6 +427,11 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
         currentTideHeight: (saved as any).currentTideHeight ?? 0,
         alarmsEnabled: (saved as any).alarmsEnabled ?? true,
         batteryMode: (saved as any).batteryMode ?? 'precision',
+        ringLabelSpacingM: (saved as any).ringLabelSpacingM ?? 10,
+        trackRetentionHours: (saved as any).trackRetentionHours ?? 4,
+        watchCode: (saved as any).watchCode ?? null,
+        remoteWatchEnabled: (saved as any).remoteWatchEnabled ?? false,
+        isWatchActive: (saved as any).isWatchActive ?? false,
         alarmThresholds: {
           gpsLostSecs: (saved_thresholds as AlarmThresholds).gpsLostSecs ?? DEFAULT_THRESHOLDS.gpsLostSecs,
           alarmCooldownSecs: (saved_thresholds as AlarmThresholds).alarmCooldownSecs ?? DEFAULT_THRESHOLDS.alarmCooldownSecs,
@@ -372,11 +450,11 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   },
 
   persistToStorage: async () => {
-    const { anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight, alarmsEnabled, batteryMode } = get();
+    const { anchorPosition, lastAnchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight, alarmsEnabled, batteryMode, ringLabelSpacingM, trackRetentionHours, watchCode, remoteWatchEnabled, isWatchActive } = get();
     try {
       await AsyncStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ anchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight, alarmsEnabled, batteryMode })
+        JSON.stringify({ anchorPosition, lastAnchorPosition, watchRadius, alarmThresholds, customZone, tideEnabled, tideAutoMode, anchorTideHeight, currentTideHeight, alarmsEnabled, batteryMode, ringLabelSpacingM, trackRetentionHours, watchCode, remoteWatchEnabled, isWatchActive })
       );
     } catch (e) {
       console.error('[HoldFast] Failed to persist to storage:', e);

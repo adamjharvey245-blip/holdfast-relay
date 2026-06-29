@@ -34,6 +34,7 @@ export interface TideDataPoint {
 
 export interface AnchorState {
   anchorPosition: Coordinate | null;
+  lastAnchorPosition: Coordinate | null;
   boatPosition: TimestampedCoordinate | null;
   watchRadius: number;
   customZone: Coordinate[] | null;
@@ -51,6 +52,8 @@ export interface AnchorState {
   gpsLostAt: number | null;
   alarmThresholds: AlarmThresholds;
   watchCode: string | null;
+  remoteWatchEnabled: boolean;
+  isPremium: boolean;
   selectedHistoryIndex: number | null;
   tideEnabled: boolean;
   tideAutoMode: boolean;
@@ -62,6 +65,9 @@ export interface AnchorState {
   tideDataLon: number | null;
   alarmsEnabled: boolean;
   batteryMode: BatteryMode;
+  ringLabelSpacingM: number;
+  trackRetentionHours: 2 | 4 | 12 | 24;
+  relayConnected: boolean;
 }
 
 export interface RelayMessage {

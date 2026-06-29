@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1260">
+<title>HoldFast Premium — IAP Screenshot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1260px;
+    height: 2736px;
+    background: #0C1B2C;
+    font-family: 'Inter', sans-serif;
+    color: #f1f5f9;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Background glow */
+  .bg-glow {
+    position: absolute;
+    width: 900px; height: 900px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #C9A22715 0%, transparent 70%);
+    top: 600px; left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 120px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 60px 20px;
+  }
+  .status-time { font-size: 42px; font-weight: 700; color: #f1f5f9; }
+  .status-icons { display: flex; align-items: center; gap: 16px; }
+  .status-icons span { font-size: 36px; color: #f1f5f9; }
+
+  /* Nav bar */
+  .nav {
+    height: 110px;
+    background: #0C1B2C;
+    border-bottom: 1px solid #1e3a6e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 0 60px;
+  }
+  .nav-logo {
+    font-size: 38px;
+    font-weight: 900;
+    letter-spacing: 6px;
+    color: #C9A227;
+  }
+  .nav-back {
+    position: absolute;
+    left: 60px;
+    font-size: 32px;
+    color: #C9A227;
+    font-weight: 600;
+  }
+
+  /* Main content */
+  .content {
+    padding: 80px 70px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+
+  /* Crown icon */
+  .crown-wrap {
+    width: 180px; height: 180px;
+    background: linear-gradient(135deg, #C9A22720, #C9A22708);
+    border: 2px solid #C9A22744;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 40px;
+    font-size: 90px;
+  }
+
+  .headline {
+    font-size: 72px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    text-align: center;
+    color: #f1f5f9;
+    line-height: 1.1;
+    margin-bottom: 24px;
+  }
+  .headline span { color: #C9A227; }
+
+  .subline {
+    font-size: 38px;
+    color: #64748b;
+    text-align: center;
+    line-height: 1.5;
+    margin-bottom: 80px;
+    max-width: 900px;
+  }
+
+  /* Feature list */
+  .features {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    margin-bottom: 80px;
+  }
+
+  .feature {
+    background: #0f2040;
+    border: 1px solid #1e3a6e;
+    border-radius: 28px;
+    padding: 44px 52px;
+    display: flex;
+    align-items: center;
+    gap: 44px;
+  }
+
+  .feature-icon {
+    width: 110px; height: 110px;
+    border-radius: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    flex-shrink: 0;
+  }
+  .icon-gold  { background: #C9A22720; border: 1px solid #C9A22744; }
+  .icon-green { background: #10b98120; border: 1px solid #10b98144; }
+  .icon-blue  { background: #239cef20; border: 1px solid #239cef44; }
+  .icon-red   { background: #ef444420; border: 1px solid #ef444444; }
+
+  .feature-text { flex: 1; }
+  .feature-title {
+    font-size: 40px;
+    font-weight: 800;
+    color: #f1f5f9;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+  .feature-desc {
+    font-size: 32px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  .feature-lock {
+    font-size: 38px;
+    color: #C9A227;
+    opacity: 0.6;
+  }
+
+  /* Price card */
+  .price-card {
+    width: 100%;
+    background: linear-gradient(135deg, #1a2f55, #0f2040);
+    border: 2px solid #C9A22766;
+    border-radius: 36px;
+    padding: 60px;
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .price-label {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #C9A227;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+  .price-amount {
+    font-size: 110px;
+    font-weight: 900;
+    color: #f1f5f9;
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .price-amount sup {
+    font-size: 60px;
+    vertical-align: super;
+    font-weight: 700;
+  }
+  .price-once {
+    font-size: 34px;
+    color: #64748b;
+    margin-bottom: 16px;
+  }
+  .price-note {
+    font-size: 28px;
+    color: #334155;
+  }
+
+  /* Buy button */
+  .buy-btn {
+    width: 100%;
+    background: #C9A227;
+    border-radius: 28px;
+    padding: 58px 40px;
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .buy-btn-text {
+    font-size: 48px;
+    font-weight: 900;
+    color: #0a1628;
+    letter-spacing: 2px;
+  }
+
+  /* Restore */
+  .restore {
+    font-size: 32px;
+    color: #334155;
+    text-align: center;
+    text-decoration: underline;
+    margin-bottom: 60px;
+  }
+
+  /* Guarantee strip */
+  .guarantee {
+    width: 100%;
+    background: #10b98112;
+    border: 1px solid #10b98133;
+    border-radius: 20px;
+    padding: 36px 48px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+  }
+  .guarantee-icon { font-size: 52px; }
+  .guarantee-text { font-size: 30px; color: #64748b; line-height: 1.4; }
+  .guarantee-text strong { color: #10b981; }
+
+  /* Bottom home indicator */
+  .home-indicator {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px; height: 10px;
+    background: #f1f5f9;
+    border-radius: 5px;
+    opacity: 0.3;
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+
+<!-- Status bar -->
+<div class="status-bar">
+  <div class="status-time">9:41</div>
+  <div class="status-icons">
+    <span>▲▲▲</span>
+    <span>WiFi</span>
+    <span>🔋</span>
+  </div>
+</div>
+
+<!-- Nav -->
+<div class="nav">
+  <div class="nav-back">‹ Settings</div>
+  <div class="nav-logo">HOLDFAST</div>
+</div>
+
+<!-- Content -->
+<div class="content">
+
+  <div class="crown-wrap">👑</div>
+
+  <div class="headline">Upgrade to<br><span>Premium</span></div>
+  <div class="subline">Everything you need to sleep soundly at anchor. One payment. Yours forever.</div>
+
+  <!-- Features -->
+  <div class="features">
+
+    <div class="feature">
+      <div class="feature-icon icon-gold">✏️</div>
+      <div class="feature-text">
+        <div class="feature-title">Custom Alarm Zones</div>
+        <div class="feature-desc">Draw your own zone around rocks, shallows, or hazards — not just a circle</div>
+      </div>
+      <div class="feature-lock">🔒</div>
+    </div>
+
+    <div class="feature">
+      <div class="feature-icon icon-green">📡</div>
+      <div class="feature-text">
+        <div class="feature-title">Remote Watch</div>
+        <div class="feature-desc">Share a live link so someone ashore can monitor your anchor position</div>
+      </div>
+      <div class="feature-lock">🔒</div>
+    </div>
+
+    <div class="feature">
+      <div class="feature-icon icon-blue">🗺️</div>
+      <div class="feature-text">
+        <div class="feature-title">GPS Track History</div>
+        <div class="feature-desc">See exactly where your boat has been throughout the night</div>
+      </div>
+      <div class="feature-lock">🔒</div>
+    </div>
+
+    <div class="feature">
+      <div class="feature-icon icon-red">🔔</div>
+      <div class="feature-text">
+        <div class="feature-title">Custom Alarm Sounds</div>
+        <div class="feature-desc">Choose the alarm that will wake you from the deepest sleep</div>
+      </div>
+      <div class="feature-lock">🔒</div>
+    </div>
+
+  </div>
+
+  <!-- Price -->
+  <div class="price-card">
+    <div class="price-label">One-Time Purchase</div>
+    <div class="price-amount"><sup>$</sup>9.99</div>
+    <div class="price-once">Pay once, use forever</div>
+    <div class="price-note">No subscription · No account · No hidden fees</div>
+  </div>
+
+  <!-- Buy -->
+  <div class="buy-btn">
+    <div class="buy-btn-text">UNLOCK PREMIUM</div>
+  </div>
+
+  <div class="restore">Restore previous purchase</div>
+
+  <!-- Guarantee -->
+  <div class="guarantee">
+    <div class="guarantee-icon">🛡️</div>
+    <div class="guarantee-text">
+      <strong>Backed by Apple's refund policy.</strong> If HoldFast Premium isn't right for you, request a refund through Apple within 14 days.
+    </div>
+  </div>
+
+</div>
+
+<div class="home-indicator"></div>
+
+</body>
+</html>

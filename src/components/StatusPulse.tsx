@@ -6,7 +6,7 @@ import type { AlarmLevel, GpsStatus } from '@/types';
 // ─── Colour config per state ──────────────────────────────────────────────────
 
 const LEVEL_CONFIG: Record<
-  AlarmLevel | 'gps_lost',
+  AlarmLevel | 'gps_lost' | 'nudge',
   { color: string; label: string; sublabel: string }
 > = {
   silent: {

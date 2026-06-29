@@ -19,9 +19,22 @@
     },
     "production": {
       "autoIncrement": true
+    },
+    "production-android": {
+      "android": {
+        "buildType": "app-bundle",
+        "autoIncrement": true
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascApiKeyPath": "C:\\Users\\User\\Documents\\p8 keys\\Anchor app\\powershellAuthKey_8LU8RF3B93.p8",
+        "ascApiKeyIssuerId": "97c2a656-7260-4e9e-9e97-8393ca8877bf",
+        "ascApiKeyId": "8LU8RF3B93",
+        "ascAppId": "6761567740"
+      }
+    }
   }
 }

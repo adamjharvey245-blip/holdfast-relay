@@ -2,12 +2,12 @@
   "expo": {
     "name": "HoldFast",
     "slug": "holdfast",
-    "version": "1.0.0",
+    "version": "1.0.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/images/logo-landscape-long.png",
+      "image": "./assets/images/splash-portrait.png",
       "resizeMode": "contain",
       "backgroundColor": "#0a1628"
     },
@@ -23,7 +23,6 @@
         "NSLocationWhenInUseUsageDescription": "HoldFast uses GPS to track boat position relative to anchor.",
         "UIBackgroundModes": [
           "location",
-          "audio",
           "fetch",
           "remote-notification"
         ],
@@ -36,6 +35,11 @@
         "backgroundColor": "#0a1628"
       },
       "package": "com.holdfast.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC_DxAaX_EQ8JLxrwsznh8tGS_yveX1rUg"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -45,8 +49,7 @@
         "RECEIVE_BOOT_COMPLETED",
         "WAKE_LOCK",
         "VIBRATE",
-        "SCHEDULE_EXACT_ALARM",
-        "USE_EXACT_ALARM"
+        "com.android.vending.BILLING"
       ]
     },
     "plugins": [

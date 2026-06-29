@@ -1,20 +1,23 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Share, Platform } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Share, Switch } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAnchorStore } from '@/store/anchorStore';
 
-// Replace with your deployed relay server URL
-const RELAY_BASE_URL = 'https://your-relay.example.com';
+const RELAY_BASE_URL = 'https://www.anchoralarm.app';
 
 export function RemoteWatchPanel() {
-  const { watchCode, generateWatchCode } = useAnchorStore();
-  const [copied, setCopied] = useState(false);
+  const { watchCode, remoteWatchEnabled, setRemoteWatchEnabled, generateWatchCode, relayConnected } = useAnchorStore();
 
   const watchUrl = watchCode
     ? `${RELAY_BASE_URL}/watch?code=${watchCode}`
     : null;
 
-  const handleGenerate = () => {
-    generateWatchCode();
+  const handleToggle = (value: boolean) => {
+    setRemoteWatchEnabled(value);
+  };
+
+  const handleRevoke = () => {
+    generateWatchCode(); // generates a new code, old watchers lose access
   };
 
   const handleShare = async () => {
@@ -31,48 +34,56 @@ export function RemoteWatchPanel() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+
+      <View style={styles.headerRow}>
         <Text style={styles.title}>REMOTE WATCH</Text>
-        <Text style={styles.subtitle}>
-          Share a link to monitor your anchor position
-        </Text>
+        <Switch
+          value={remoteWatchEnabled}
+          onValueChange={handleToggle}
+          trackColor={{ false: '#1e3a6e', true: '#C9A22766' }}
+          thumbColor={remoteWatchEnabled ? '#C9A227' : '#334155'}
+        />
       </View>
 
-      {!watchCode ? (
-        <TouchableOpacity style={styles.generateBtn} onPress={handleGenerate}>
-          <Text style={styles.generateBtnText}>GENERATE WATCH CODE</Text>
-        </TouchableOpacity>
-      ) : (
+      <Text style={styles.subtitle}>
+        Share a link so someone ashore can monitor your anchor position in real time.
+      </Text>
+
+      {remoteWatchEnabled && watchCode && (
         <>
+          <View style={styles.headerRow}>
+            <View style={[styles.liveBadge, relayConnected ? styles.liveBadgeOn : styles.liveBadgeOff]}>
+              <View style={[styles.liveDot, relayConnected ? styles.liveDotOn : styles.liveDotOff]} />
+              <Text style={[styles.liveText, relayConnected ? styles.liveTextOn : styles.liveTextOff]}>
+                {relayConnected ? 'LIVE' : 'OFFLINE'}
+              </Text>
+            </View>
+          </View>
+
           <View style={styles.codeBox}>
-            <Text style={styles.codeLabel}>YOUR CODE</Text>
+            <Text style={styles.codeLabel}>WATCH CODE</Text>
             <Text style={styles.codeDigits}>{watchCode}</Text>
+            <Text style={styles.codeHint}>Give this code to your shore contact</Text>
           </View>
 
           <View style={styles.urlBox}>
-            <Text style={styles.urlText} numberOfLines={2}>
-              {watchUrl}
-            </Text>
+            <Text style={styles.urlLabel}>WATCH LINK</Text>
+            <Text style={styles.urlText} numberOfLines={1}>{watchUrl}</Text>
           </View>
 
           <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.shareBtn}
-              onPress={handleShare}
-            >
-              <Text style={styles.shareBtnText}>SHARE LINK</Text>
+            <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+              <Ionicons name="share-outline" size={16} color="#0a1628" />
+              <Text style={styles.shareBtnText}>SHARE</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.regenerateBtn}
-              onPress={handleGenerate}
-            >
-              <Text style={styles.regenerateBtnText}>NEW CODE</Text>
+            <TouchableOpacity style={styles.revokeBtn} onPress={handleRevoke}>
+              <Ionicons name="refresh-outline" size={16} color="#64748b" />
+              <Text style={styles.revokeBtnText}>NEW CODE</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.hint}>
-            Anyone with this code can view your live position.{'\n'}
-            Generate a new code to revoke access.
+            Generating a new code immediately revokes access for anyone using the old one.
           </Text>
         </>
       )}
@@ -88,80 +99,102 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderWidth: 1,
     borderColor: '#1e3a6e',
+    gap: 12,
   },
-  header: {
-    marginBottom: 16,
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   title: {
-    color: '#f59e0b',
+    color: '#C9A227',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 2,
   },
   subtitle: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 12,
-    marginTop: 2,
+    lineHeight: 17,
+    marginTop: -4,
   },
-  generateBtn: {
-    backgroundColor: '#162d57',
-    borderRadius: 10,
-    paddingVertical: 14,
+  liveBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#1e3a6e',
   },
-  generateBtnText: {
-    color: '#f59e0b',
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
+  liveBadgeOn: { backgroundColor: '#10b98115', borderColor: '#10b98166' },
+  liveBadgeOff: { backgroundColor: '#1e3a6e22', borderColor: '#1e3a6e' },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveDotOn: { backgroundColor: '#10b981' },
+  liveDotOff: { backgroundColor: '#334155' },
+  liveText: { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  liveTextOn: { color: '#10b981' },
+  liveTextOff: { color: '#64748b' },
+
   codeBox: {
     alignItems: 'center',
     backgroundColor: '#162d57',
     borderRadius: 10,
-    paddingVertical: 14,
-    marginBottom: 10,
+    paddingVertical: 16,
     borderWidth: 1,
-    borderColor: '#f59e0b44',
+    borderColor: '#C9A22744',
+    gap: 2,
   },
   codeLabel: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 2,
-    marginBottom: 4,
   },
   codeDigits: {
-    color: '#f59e0b',
-    fontSize: 44,
+    color: '#C9A227',
+    fontSize: 48,
     fontWeight: '800',
-    letterSpacing: 12,
+    letterSpacing: 14,
     fontFamily: 'monospace',
   },
+  codeHint: {
+    color: '#64748b',
+    fontSize: 11,
+    marginTop: 4,
+  },
+
   urlBox: {
     backgroundColor: '#04080f',
     borderRadius: 8,
     padding: 10,
-    marginBottom: 12,
+    gap: 3,
+  },
+  urlLabel: {
+    color: '#64748b',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
   urlText: {
-    color: '#475569',
+    color: '#94a3b8',
     fontSize: 11,
     fontFamily: 'monospace',
   },
+
   actions: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 12,
   },
   shareBtn: {
     flex: 2,
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#C9A227',
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
   shareBtnText: {
     color: '#0a1628',
@@ -169,22 +202,25 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
-  regenerateBtn: {
+  revokeBtn: {
     flex: 1,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 13,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
     borderWidth: 1,
     borderColor: '#334155',
   },
-  regenerateBtnText: {
-    color: '#64748b',
+  revokeBtnText: {
+    color: '#94a3b8',
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
   },
   hint: {
-    color: '#334155',
+    color: '#64748b',
     fontSize: 11,
     textAlign: 'center',
     lineHeight: 16,

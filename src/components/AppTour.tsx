@@ -1,95 +1,105 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TouchableOpacity,
   Modal,
   Dimensions,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { tourRefs, TourTargetKey } from './tourTargets';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
+const CARD_W = Math.min(320, SW - 32);
+const RING_PAD = 10;
+const POINTER = 9;
+
 interface TourStep {
-  icon: any;
+  icon?: any;         // Ionicons name (omitted when `image` is set)
+  image?: boolean;    // render the brand anchor mark instead of an Ionicon
   iconColor: string;
   title: string;
   body: string;
-  // Approximate position of the highlight spot (used to point the callout)
-  position?: 'top' | 'bottom' | 'center';
+  // The on-screen control this step points at (omit for an informational card)
+  target?: TourTargetKey;
+  // True when the target is overlaid on the native map view. On iOS such a
+  // target can measure relative to the map's frame (omitting the status-bar +
+  // header offset above it); AppTour corrects this against the map container.
+  overMap?: boolean;
 }
 
 const TOUR_STEPS: TourStep[] = [
   {
-    icon: 'anchor',
+    image: true,
     iconColor: '#C9A227',
-    title: 'Dropping the Anchor',
-    body: 'There are four ways to set your anchor position:\n\n1. Press and hold the map where the anchor is lying — a confirmation prompt will appear\n\n2. Tap the anchor button (toolbar) to enter place mode, then press and hold the map at the exact spot\n\n3. Drop at GPS — places the anchor directly beneath the boat\'s current position\n\n4. Relative position — enter a distance and bearing from the boat. Tap USE COMPASS and point your phone toward the anchor to set the bearing automatically.',
-    position: 'center',
+    title: 'Drop the Anchor',
+    body: 'Tap DROP ANCHOR to set your position — by GPS, a bearing & distance, coordinates, or by pressing the map. This is your first step every time you anchor.',
+    target: 'drop',
+    overMap: true,
   },
   {
     icon: 'radio-button-on-outline',
     iconColor: '#10b981',
     title: 'Watch Radius',
-    body: 'The green ring shows your watch radius — the boundary your boat must not cross. Tap the radius button (bottom toolbar) to adjust it with a slider. Set it to reflect your chain scope plus the boat\'s swing. Typically 1.5× your chain length.',
-    position: 'center',
+    body: 'Tap RADIUS to size the ring your boat must stay inside — typically about 1.5× your chain scope to allow for swing.',
+    target: 'radius',
   },
   {
     icon: 'power',
     iconColor: '#10b981',
     title: 'Activate the Watch',
-    body: 'Tap the large WATCH button at the bottom of the screen to start monitoring. The button turns red when the watch is active. The ring turns orange then red as the boat approaches or crosses the boundary.',
-    position: 'bottom',
+    body: 'Once your anchor is dropped, tap this WATCH button to start monitoring — the ring turns orange then red if you approach or cross the boundary.',
+    target: 'watchToggle',
   },
   {
-    icon: 'lock-closed-outline',
+    icon: 'lock-open-outline',
     iconColor: '#C9A227',
-    title: 'Moving the Anchor',
-    body: 'The padlock icon on the left side of the map locks the anchor in place. Tap it to unlock (it turns green) — you can then drag the anchor icon to reposition it. Tap again to lock it.',
-    position: 'center',
+    title: 'Move the Anchor',
+    body: 'This padlock locks the anchor in place. Tap to unlock, then drag the anchor or the ring to fine-tune its position. Tap again to lock.',
+    target: 'lock',
   },
   {
     icon: 'notifications',
     iconColor: '#ef4444',
     title: 'Alarms',
-    body: 'When the boat crosses the boundary, an alarm fires — sound and vibration. There are three levels: Alert (boundary reached), Emergency (well past the boundary), and GPS Lost (no signal). Each can be configured in Settings.',
-    position: 'center',
+    body: 'Cross the boundary and the alarm fires with sound and vibration: Alert at the line, Emergency well past it, and GPS Lost on signal loss. Tune each in Settings.',
   },
   {
-    icon: 'alert-circle-outline',
+    icon: 'volume-mute',
     iconColor: '#f97316',
     title: 'Silencing Alarms',
-    body: 'Tap the SILENCE button when an alarm is active to mute it for the cooldown period (default 2 minutes). The alarm will re-fire after the cooldown if the boat is still outside the zone.',
-    position: 'bottom',
+    body: 'Tap SILENCE on an active alarm to mute it for the cooldown (default 2 min). It re-fires if you’re still outside the zone.',
   },
   {
     icon: 'time-outline',
     iconColor: '#C9A227',
-    title: 'GPS Track History',
-    body: 'HoldFast records your GPS track for up to 4 hours. Tap the track button (bottom toolbar) to open the playback slider — scrub back through time to see exactly where the boat has been.',
-    position: 'bottom',
+    title: 'Track History',
+    body: 'Tap HISTORY to scrub back through your GPS track and see exactly where the boat has drifted through the night.',
+    target: 'history',
   },
   {
     icon: 'map-outline',
     iconColor: '#94a3b8',
     title: 'Map Styles',
-    body: 'Tap the map style button (bottom-left of the map) to cycle between Satellite, Standard, and Nautical Chart views. The chart overlay uses OpenSeaMap data and shows depth contours, hazards, and navigational marks.',
-    position: 'center',
+    body: 'This button cycles Satellite, Standard, and Nautical Chart — the chart shows depth contours, hazards and marks from OpenSeaMap.',
+    target: 'mapStyle',
   },
   {
     icon: 'warning-outline',
     iconColor: '#C9A227',
     title: 'Important Limitations',
-    body: 'HoldFast is a supplementary tool only. GPS accuracy varies. Alarms may not fire if the device battery dies, the app is force-closed, or iOS suspends background processes. Keep the device plugged in and do not rely solely on this app for vessel safety.',
-    position: 'center',
+    body: 'HoldFast is a supplementary aid only. GPS varies and alarms can fail if the battery dies or the OS suspends the app. Keep the phone powered — never rely solely on this app.',
   },
   {
     icon: 'settings-outline',
     iconColor: '#94a3b8',
     title: 'Settings',
-    body: 'Access Settings from the gear icon (top right) to configure alarm thresholds, sounds, the watch radius, and to replay this tour. You can also view the full Terms of Service and Privacy Policy there.',
-    position: 'top',
+    body: 'Tap SETTINGS for alarm thresholds, sounds, the watch radius, Terms & Privacy — and to replay this tour any time.',
+    target: 'settings',
   },
 ];
 
@@ -98,203 +108,312 @@ interface AppTourProps {
   onDone: () => void;
 }
 
+type Rect = { x: number; y: number; w: number; h: number };
+
 export function AppTour({ visible, onDone }: AppTourProps) {
   const [step, setStep] = useState(0);
+  const [rect, setRect] = useState<Rect | null>(null);
+  const fade = useRef(new Animated.Value(0)).current;
 
   const current = TOUR_STEPS[step];
   const isLast = step === TOUR_STEPS.length - 1;
 
-  const next = () => {
-    if (isLast) {
-      onDone();
-      setStep(0);
-    } else {
-      setStep(s => s + 1);
+  // Measure this step's target (if any) so the coachmark can point at it.
+  const measure = useCallback(() => {
+    const key = current.target;
+    const node = key ? tourRefs[key]?.current : null;
+    if (!node || typeof node.measureInWindow !== 'function') {
+      setRect(null);
+      return;
     }
-  };
+    node.measureInWindow((x: number, y: number, w: number, h: number) => {
+      if (!w && !h) { setRect(null); return; }
 
-  const skip = () => {
-    onDone();
-    setStep(0);
+      // On iOS a control overlaid on the native map can report its position
+      // relative to the map's frame, dropping the status-bar + header offset
+      // above it (the highlight then lands up in the status bar). If the
+      // target measures *above* its own map container — which is impossible
+      // when correct — re-anchor it by the container's window offset. The
+      // guard means correctly-measured targets are never touched.
+      const mapNode = current.overMap ? tourRefs.mapRoot?.current : null;
+      if (mapNode && typeof mapNode.measureInWindow === 'function') {
+        mapNode.measureInWindow((mx: number, my: number) => {
+          if (y < my) setRect({ x: x + mx, y: y + my, w, h });
+          else setRect({ x, y, w, h });
+        });
+        return;
+      }
+
+      setRect({ x, y, w, h });
+    });
+  }, [current]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setRect(null);
+    fade.setValue(0);
+    const t = setTimeout(() => {
+      measure();
+      Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    }, 60);
+    return () => clearTimeout(t);
+  }, [visible, step, measure]);
+
+  const next = () => {
+    if (isLast) { onDone(); setStep(0); }
+    else setStep(s => s + 1);
   };
+  const back = () => setStep(s => Math.max(0, s - 1));
+  const skip = () => { onDone(); setStep(0); };
+
+  // ── Layout maths ──────────────────────────────────────────────────────────
+  // Place the card below the target when it sits in the top half of the screen,
+  // otherwise above it. Without a target, centre the card.
+  let cardStyle: any;
+  let pointer: { left: number; up: boolean } | null = null;
+
+  if (rect) {
+    const targetCx = rect.x + rect.w / 2;
+    const placeBelow = rect.y + rect.h / 2 < SH * 0.46;
+    const left = Math.min(Math.max(targetCx - CARD_W / 2, 16), SW - 16 - CARD_W);
+    cardStyle = placeBelow
+      ? { top: rect.y + rect.h + RING_PAD + POINTER + 2, left }
+      : { bottom: SH - (rect.y - RING_PAD - POINTER - 2), left };
+    pointer = {
+      left: Math.min(Math.max(targetCx - left, 20), CARD_W - 20),
+      up: placeBelow,
+    };
+  } else {
+    cardStyle = { top: SH / 2 - 150, left: (SW - CARD_W) / 2 };
+  }
 
   return (
-    <Modal visible={visible} transparent animationType="fade">
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          {/* Step counter */}
-          <View style={styles.stepRow}>
+    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={skip}>
+      <View style={styles.dim} pointerEvents="box-none">
+
+        {/* Highlight ring around the target */}
+        {rect && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.ring,
+              {
+                left: rect.x - RING_PAD,
+                top: rect.y - RING_PAD,
+                width: rect.w + RING_PAD * 2,
+                height: rect.h + RING_PAD * 2,
+                borderColor: current.iconColor,
+                opacity: fade,
+              },
+            ]}
+          />
+        )}
+
+        {/* Coachmark card */}
+        <Animated.View style={[styles.card, cardStyle, { opacity: fade }]}>
+
+          {/* Pointer triangle toward the target */}
+          {pointer && (
+            <View
+              style={[
+                pointer.up ? styles.pointerUp : styles.pointerDown,
+                { left: pointer.left - POINTER },
+              ]}
+            />
+          )}
+
+          {/* Header: icon chip + step counter + skip */}
+          <View style={styles.headRow}>
+            <View style={[styles.iconChip, { borderColor: current.iconColor + '55', backgroundColor: current.iconColor + '1f' }]}>
+              {current.image ? (
+                <Image
+                  source={require('../../assets/images/anchor-icon.png')}
+                  style={{ width: 18, height: 18, tintColor: current.iconColor }}
+                  resizeMode="contain"
+                />
+              ) : (
+                <Ionicons name={current.icon} size={18} color={current.iconColor} />
+              )}
+            </View>
             <Text style={styles.stepCount}>{step + 1} / {TOUR_STEPS.length}</Text>
-            <TouchableOpacity onPress={skip}>
-              <Text style={styles.skipText}>SKIP TOUR</Text>
+            <TouchableOpacity onPress={skip} hitSlop={8}>
+              <Text style={styles.skipText}>SKIP</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Progress bar */}
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${((step + 1) / TOUR_STEPS.length) * 100}%` }]} />
-          </View>
-
-          {/* Icon */}
-          <View style={[styles.iconCircle, { borderColor: current.iconColor + '66', backgroundColor: current.iconColor + '15' }]}>
-            <Ionicons name={current.icon} size={32} color={current.iconColor} />
-          </View>
-
-          {/* Content */}
           <Text style={styles.title}>{current.title}</Text>
           <Text style={styles.body}>{current.body}</Text>
 
-          {/* Safety notice on last step */}
-          {isLast && (
-            <View style={styles.safetyBox}>
-              <Ionicons name="shield-checkmark-outline" size={14} color="#C9A227" />
-              <Text style={styles.safetyText}>
-                You can replay this tour at any time from Settings → About → App Tour.
-              </Text>
-            </View>
-          )}
+          {/* Progress dots */}
+          <View style={styles.dotsRow}>
+            {TOUR_STEPS.map((_, i) => (
+              <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
+            ))}
+          </View>
 
           {/* Navigation */}
           <View style={styles.footer}>
-            {step > 0 && (
-              <TouchableOpacity style={styles.backBtn} onPress={() => setStep(s => s - 1)}>
-                <Ionicons name="arrow-back" size={16} color="#64748b" />
+            {step > 0 ? (
+              <TouchableOpacity style={styles.backBtn} onPress={back}>
+                <Ionicons name="arrow-back" size={15} color="#94a3b8" />
                 <Text style={styles.backBtnText}>BACK</Text>
               </TouchableOpacity>
+            ) : (
+              <View style={{ flex: 1 }} />
             )}
-            <TouchableOpacity
-              style={[styles.nextBtn, step === 0 && { flex: 1 }]}
-              onPress={next}
-            >
+            <TouchableOpacity style={styles.nextBtn} onPress={next}>
               <Text style={styles.nextBtnText}>{isLast ? 'GET STARTED' : 'NEXT'}</Text>
-              <Ionicons name={isLast ? 'checkmark' : 'arrow-forward'} size={16} color="#0a1628" />
+              <Ionicons name={isLast ? 'checkmark' : 'arrow-forward'} size={15} color="#0a1628" />
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  dim: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    backgroundColor: 'rgba(2,6,15,0.74)',
+  },
+  ring: {
+    position: 'absolute',
+    borderRadius: 16,
+    borderWidth: 2.5,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    shadowColor: '#fff',
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
   },
   card: {
+    position: 'absolute',
+    width: CARD_W,
     backgroundColor: '#0f2040',
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#1e3a6e',
-    width: '100%',
-    maxWidth: 420,
-    gap: 14,
+    borderColor: '#274a86',
+    gap: 9,
+    shadowColor: '#000',
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 12,
   },
-  stepRow: {
+  pointerUp: {
+    position: 'absolute',
+    top: -POINTER,
+    width: 0,
+    height: 0,
+    borderLeftWidth: POINTER,
+    borderRightWidth: POINTER,
+    borderBottomWidth: POINTER,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#0f2040',
+  },
+  pointerDown: {
+    position: 'absolute',
+    bottom: -POINTER,
+    width: 0,
+    height: 0,
+    borderLeftWidth: POINTER,
+    borderRightWidth: POINTER,
+    borderTopWidth: POINTER,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#0f2040',
+  },
+  headRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
+  },
+  iconChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stepCount: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    flex: 1,
+  },
+  skipText: {
     color: '#475569',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
   },
-  skipText: {
-    color: '#334155',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-  },
-  progressTrack: {
-    height: 3,
-    backgroundColor: '#1e3a6e',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#C9A227',
-    borderRadius: 2,
-  },
-  iconCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: 4,
-  },
   title: {
     color: '#f1f5f9',
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
-    textAlign: 'center',
     letterSpacing: 0.3,
   },
   body: {
     color: '#94a3b8',
-    fontSize: 14,
-    lineHeight: 22,
-    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 19,
   },
-  safetyBox: {
+  dotsRow: {
     flexDirection: 'row',
-    gap: 8,
-    alignItems: 'flex-start',
-    backgroundColor: '#C9A22715',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#C9A22730',
+    gap: 5,
+    alignItems: 'center',
+    marginTop: 1,
   },
-  safetyText: {
-    color: '#C9A227',
-    fontSize: 12,
-    lineHeight: 17,
-    flex: 1,
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#1e3a6e',
+  },
+  dotActive: {
+    backgroundColor: '#C9A227',
+    width: 16,
   },
   footer: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
+    marginTop: 3,
+    alignItems: 'center',
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
+    gap: 5,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: '#1e3a6e',
   },
   backBtnText: {
-    color: '#64748b',
-    fontSize: 13,
+    color: '#94a3b8',
+    fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1,
   },
   nextBtn: {
-    flex: 2,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 7,
     backgroundColor: '#C9A227',
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 11,
+    paddingVertical: 12,
   },
   nextBtnText: {
     color: '#0a1628',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 1,
   },

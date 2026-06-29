@@ -216,12 +216,12 @@ function StepToS({
 
         <Text style={tosStyles.sectionHead}>2. No Warranty</Text>
         <Text style={tosStyles.body}>
-          HoldFast is provided "as is" without any warranty of accuracy, reliability, or fitness for a particular purpose. GPS accuracy can vary significantly depending on device hardware, satellite availability, atmospheric conditions, and local obstructions. Device sleep states, background app restrictions, low battery, and loss of connectivity can all prevent or delay alarms. You must not rely solely on HoldFast for vessel safety.
+          HoldFast is provided &quot;as is&quot; without any warranty of accuracy, reliability, or fitness for a particular purpose. GPS accuracy can vary significantly depending on device hardware, satellite availability, atmospheric conditions, and local obstructions. Device sleep states, background app restrictions, low battery, and loss of connectivity can all prevent or delay alarms. You must not rely solely on HoldFast for vessel safety.
         </Text>
 
         <Text style={tosStyles.sectionHead}>3. Assumption of Risk</Text>
         <Text style={tosStyles.body}>
-          By using HoldFast you acknowledge and accept that all digital alarm systems can fail. You assume full responsibility for your vessel's safety and accept all risks associated with anchoring, including but not limited to anchor drag, collision, grounding, and property damage or personal injury arising therefrom.
+          By using HoldFast you acknowledge and accept that all digital alarm systems can fail. You assume full responsibility for your vessel&apos;s safety and accept all risks associated with anchoring, including but not limited to anchor drag, collision, grounding, and property damage or personal injury arising therefrom.
         </Text>
 
         <Text style={tosStyles.sectionHead}>4. Limitation of Liability</Text>
@@ -300,18 +300,18 @@ function StepLocation({ granted, onRequest }: { granted: boolean | null; onReque
       <Text style={styles.stepTitle}>Always-On Location</Text>
       <Text style={styles.stepBody}>
         HoldFast needs your location <Text style={styles.bold}>even when the screen is off</Text>.
-        This is how the alarm fires at 3am when you're asleep below deck.
+        This is how the alarm fires at 3am when you&apos;re asleep below deck.
       </Text>
 
       <View style={styles.permBox}>
         <Text style={styles.permBoxTitle}>WHAT TO EXPECT</Text>
         <View style={styles.permItem}>
           <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-          <Text style={styles.permItemText}>iOS: tap "Allow While Using App", then "Change to Always Allow"</Text>
+          <Text style={styles.permItemText}>iOS: tap &quot;Allow While Using App&quot;, then &quot;Change to Always Allow&quot;</Text>
         </View>
         <View style={styles.permItem}>
           <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-          <Text style={styles.permItemText}>Android: choose "Allow all the time" (not just "while using")</Text>
+          <Text style={styles.permItemText}>Android: choose &quot;Allow all the time&quot; (not just &quot;while using&quot;)</Text>
         </View>
         <View style={styles.permItem}>
           <Ionicons name="information-circle-outline" size={16} color="#C9A227" />
@@ -337,7 +337,7 @@ function StepLocation({ granted, onRequest }: { granted: boolean | null; onReque
         <View style={styles.deniedCard}>
           <Ionicons name="alert-circle-outline" size={16} color="#ef4444" />
           <Text style={styles.deniedText}>
-            Location denied. Open Settings → Privacy → Location Services → HoldFast and set to "Always".
+            Location denied. Open Settings → Privacy → Location Services → HoldFast and set to &quot;Always&quot;.
             The alarm will not fire in the background without this.
           </Text>
         </View>
@@ -405,10 +405,14 @@ function StepReady() {
   return (
     <View style={styles.stepContent}>
       <View style={[styles.iconCircle, styles.iconCircleGreen]}>
-        <Ionicons name="anchor" size={36} color="#10b981" />
+        <Image
+          source={require('../assets/images/anchor-icon.png')}
+          style={{ width: 40, height: 40, tintColor: '#10b981' }}
+          resizeMode="contain"
+        />
       </View>
 
-      <Text style={styles.stepTitle}>You're Ready</Text>
+      <Text style={styles.stepTitle}>You&apos;re Ready</Text>
       <Text style={styles.stepBody}>
         Three things to remember before your first night at anchor:
       </Text>
@@ -453,7 +457,15 @@ function StepReady() {
 function Feature({ icon, text }: { icon: any; text: string }) {
   return (
     <View style={styles.featureRow}>
-      <Ionicons name={icon} size={18} color="#C9A227" />
+      {icon === 'anchor' ? (
+        <Image
+          source={require('../assets/images/anchor-icon.png')}
+          style={{ width: 18, height: 18, tintColor: '#C9A227' }}
+          resizeMode="contain"
+        />
+      ) : (
+        <Ionicons name={icon} size={18} color="#C9A227" />
+      )}
       <Text style={styles.featureText}>{text}</Text>
     </View>
   );
