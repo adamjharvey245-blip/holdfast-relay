@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import Purchases, { LOG_LEVEL, PurchasesPackage } from 'react-native-purchases';
 import { useAnchorStore } from '@/store/anchorStore';
 
@@ -71,5 +71,17 @@ export function usePremiumInit() {
       const isPremium = await checkPremiumStatus();
       useAnchorStore.getState().setIsPremium(isPremium);
     })();
+
+    // Re-check on every foreground. Catches offer-code redemptions made
+    // through the native sheet or the App Store, where the entitlement may
+    // land after the app has resigned active and the update listener alone
+    // isn't guaranteed to fire.
+    const sub = AppState.addEventListener('change', async (state) => {
+      if (state === 'active') {
+        const active = await checkPremiumStatus();
+        useAnchorStore.getState().setIsPremium(active);
+      }
+    });
+    return () => sub.remove();
   }, []);
 }
