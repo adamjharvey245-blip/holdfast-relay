@@ -17,6 +17,15 @@ export async function initialisePurchases() {
   initialised = true;
   Purchases.setLogLevel(LOG_LEVEL.ERROR);
   Purchases.configure({ apiKey: REVENUECAT_API_KEY });
+
+  // Keep premium status in sync with any entitlement change — including
+  // offer-code redemptions made through the native redemption sheet, which
+  // otherwise wouldn't update the UI until the next app launch.
+  Purchases.addCustomerInfoUpdateListener((info) => {
+    if (FORCE_PREMIUM) return;
+    const active = info.entitlements.active[ENTITLEMENT_ID] !== undefined;
+    useAnchorStore.getState().setIsPremium(active);
+  });
 }
 
 export async function checkPremiumStatus(): Promise<boolean> {
