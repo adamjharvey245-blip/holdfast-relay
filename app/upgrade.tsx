@@ -76,6 +76,21 @@ export default function UpgradeScreen() {
     }
   };
 
+  const handleRedeemCode = async () => {
+    if (Platform.OS !== 'ios') {
+      Alert.alert(
+        'Redeem on Google Play',
+        'To use your code, open the Google Play Store, tap your profile, choose "Payments & subscriptions" → "Redeem code".'
+      );
+      return;
+    }
+    try {
+      await Purchases.presentCodeRedemptionSheet();
+    } catch {
+      Alert.alert('Unable to open', 'Could not open the redemption sheet. Please try again.');
+    }
+  };
+
   const handleRestore = async () => {
     setRestoring(true);
     const result = await restorePurchases();
@@ -223,6 +238,16 @@ export default function UpgradeScreen() {
           }
         </TouchableOpacity>
 
+        {/* Redeem offer code */}
+        <TouchableOpacity
+          style={styles.redeemBtn}
+          onPress={handleRedeemCode}
+          disabled={loading || restoring}
+        >
+          <Ionicons name="pricetag-outline" size={14} color="#94a3b8" />
+          <Text style={styles.redeemText}>Have a code?</Text>
+        </TouchableOpacity>
+
         {/* Guarantee */}
         <View style={styles.guarantee}>
           <Ionicons name="shield-outline" size={20} color="#10b981" />
@@ -329,6 +354,12 @@ const styles = StyleSheet.create({
 
   restoreBtn: { alignItems: 'center', paddingVertical: 8 },
   restoreText: { color: '#334155', fontSize: 13, textDecorationLine: 'underline' },
+
+  redeemBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10,
+  },
+  redeemText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
 
   guarantee: {
     flexDirection: 'row', gap: 12, alignItems: 'flex-start',
