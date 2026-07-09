@@ -54,6 +54,7 @@ export interface AnchorState {
   watchCode: string | null;
   remoteWatchEnabled: boolean;
   isPremium: boolean;
+  isRedeeming: boolean;
   selectedHistoryIndex: number | null;
   tideEnabled: boolean;
   tideAutoMode: boolean;

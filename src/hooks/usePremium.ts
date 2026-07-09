@@ -12,6 +12,16 @@ const FORCE_PREMIUM = false;
 
 let initialised = false;
 
+// Set when the user opens the offer-code redemption sheet. Redemptions finish
+// asynchronously after the sheet closes and are NOT reliably reflected by
+// getCustomerInfo() — only a restore forces RevenueCat to re-read the receipt.
+// The next foreground after a redemption therefore restores instead of a
+// passive status check.
+let redemptionPending = false;
+export function markRedemptionPending() {
+  redemptionPending = true;
+}
+
 export async function initialisePurchases() {
   if (initialised) return;
   initialised = true;
@@ -72,15 +82,28 @@ export function usePremiumInit() {
       useAnchorStore.getState().setIsPremium(isPremium);
     })();
 
-    // Re-check on every foreground. Catches offer-code redemptions made
-    // through the native sheet or the App Store, where the entitlement may
-    // land after the app has resigned active and the update listener alone
-    // isn't guaranteed to fire.
+    // Re-check on every foreground. If the user just went through the
+    // redemption sheet, force a restore (the only call that reliably pulls in
+    // an offer-code entitlement), retrying a few times while StoreKit settles.
+    // Otherwise do a light passive status check.
     const sub = AppState.addEventListener('change', async (state) => {
-      if (state === 'active') {
-        const active = await checkPremiumStatus();
-        useAnchorStore.getState().setIsPremium(active);
+      if (state !== 'active') return;
+      if (redemptionPending) {
+        redemptionPending = false;
+        useAnchorStore.getState().setIsRedeeming(true);
+        try {
+          for (let i = 0; i < 4; i++) {
+            const { success } = await restorePurchases();
+            if (success) return;
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        } finally {
+          useAnchorStore.getState().setIsRedeeming(false);
+        }
+        return;
       }
+      const active = await checkPremiumStatus();
+      useAnchorStore.getState().setIsPremium(active);
     });
     return () => sub.remove();
   }, []);

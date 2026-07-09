@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Purchases, { PurchasesPackage } from 'react-native-purchases';
-import { purchasePremium, restorePurchases } from '@/hooks/usePremium';
+import { purchasePremium, restorePurchases, markRedemptionPending } from '@/hooks/usePremium';
 import { useAnchorStore } from '@/store/anchorStore';
 
 const FEATURES = [
@@ -41,6 +41,7 @@ type PlanKey = 'annual' | 'lifetime';
 export default function UpgradeScreen() {
   const router = useRouter();
   const isPremium = useAnchorStore(s => s.isPremium);
+  const isRedeeming = useAnchorStore(s => s.isRedeeming);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanKey>('annual');
@@ -85,6 +86,9 @@ export default function UpgradeScreen() {
       return;
     }
     try {
+      // Flag the redemption so the next foreground restores and picks up the
+      // entitlement — getCustomerInfo() alone doesn't reflect code redemptions.
+      markRedemptionPending();
       await Purchases.presentCodeRedemptionSheet();
     } catch {
       Alert.alert('Unable to open', 'Could not open the redemption sheet. Please try again.');
@@ -270,6 +274,13 @@ export default function UpgradeScreen() {
         </View>
 
       </ScrollView>
+
+      {isRedeeming && (
+        <View style={styles.redeemOverlay}>
+          <ActivityIndicator color="#C9A227" size="large" />
+          <Text style={styles.redeemOverlayText}>Restoring your purchase…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -372,6 +383,13 @@ const styles = StyleSheet.create({
   legalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 4 },
   legalSep: { color: '#334155', fontSize: 12 },
   privacyText: { color: '#334155', fontSize: 12, textDecorationLine: 'underline' },
+
+  redeemOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: '#0a1628ee',
+    alignItems: 'center', justifyContent: 'center', gap: 16,
+  },
+  redeemOverlayText: { color: '#94a3b8', fontSize: 14, fontWeight: '600' },
 
   alreadyPremium: {
     flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, padding: 32,

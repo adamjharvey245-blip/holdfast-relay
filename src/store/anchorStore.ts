@@ -83,6 +83,7 @@ interface AnchorActions {
   setRelayConnected: (connected: boolean) => void;
   setRemoteWatchEnabled: (enabled: boolean) => void;
   setIsPremium: (premium: boolean) => void;
+  setIsRedeeming: (redeeming: boolean) => void;
   setSelectedHistoryIndex: (index: number | null) => void;
   useHistoryPositionAsAnchor: () => void;
   setAlarmThresholds: (t: Partial<AlarmThresholds>) => void;
@@ -126,6 +127,7 @@ const initialState: AnchorState = {
   relayConnected: false,
   remoteWatchEnabled: false,
   isPremium: false,
+  isRedeeming: false,
   selectedHistoryIndex: null,
   tideEnabled: false,
   tideAutoMode: true,
@@ -298,6 +300,7 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   setWatchCode: (code) => set({ watchCode: code }),
   setRelayConnected: (connected) => set({ relayConnected: connected }),
   setIsPremium: (premium) => set({ isPremium: premium }),
+  setIsRedeeming: (redeeming) => set({ isRedeeming: redeeming }),
 
   setRemoteWatchEnabled: (enabled) => {
     if (enabled) {
