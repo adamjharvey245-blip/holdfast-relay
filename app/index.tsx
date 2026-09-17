@@ -39,12 +39,15 @@ function GpsStrengthBar({ accuracy, status, lastFix }: { accuracy: number | null
 
   const color =
     status === 'lost' ? '#ef4444' :
+    status === 'degraded' ? '#f97316' :
     bars >= 4 ? '#10b981' :
     bars >= 2 ? '#C9A227' : '#64748b';
 
+  // 'degraded' = fix accuracy is too poor to drive the alarm (see utils/alarmLevel.ts)
   const label =
     status === 'searching' ? 'SEARCHING' :
     status === 'lost' ? 'GPS LOST' :
+    status === 'degraded' ? `±${Math.round(accuracy ?? 0)}m · LOW ACCURACY` :
     accuracy !== null ? `±${Math.round(accuracy)}m` : 'GPS OK';
 
   const fixTime = lastFix

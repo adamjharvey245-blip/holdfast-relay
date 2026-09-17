@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { haversineDistance } from '../utils/haversine';
-import { computeAlarmLevel, computeEffectiveRadius } from '../utils/alarmLevel';
+import { computeAlarmLevel, computeEffectiveRadius, isFixTrusted, nextAlarmLevel } from '../utils/alarmLevel';
 import type {
   AnchorState,
   AlarmLevel,
@@ -28,9 +28,31 @@ const DEFAULT_THRESHOLDS: AlarmThresholds = {
   gpsLostEnabled: true,
 };
 
+// User-initiated changes (radius slider, tide settings) recompute the level
+// immediately from the last trusted distance — no confirmation delay, since
+// this is deliberate input rather than GPS noise. Returns a partial state.
+function recomputeLevel(
+  state: AnchorState,
+  overrides: Partial<Pick<AnchorState, 'watchRadius' | 'tideEnabled' | 'anchorTideHeight' | 'currentTideHeight'>>
+): Partial<AnchorState> {
+  const s = { ...state, ...overrides };
+  if (!s.isWatchActive || !s.anchorPosition || s.gpsStatus === 'lost') return {};
+  const er = computeEffectiveRadius(s.watchRadius, s.tideEnabled, s.anchorTideHeight, s.currentTideHeight);
+  const level = computeAlarmLevel(s.currentDistance, er, s.customZone, s.boatPosition, s.alarmThresholds.emergencyThresholdPct);
+  return {
+    alarmLevel: level,
+    pendingAlarmLevel: 'silent',
+    pendingAlarmCount: 0,
+    isDragging: level !== 'silent',
+    ...(level === 'silent' ? { draggingCancelledAt: null } : {}),
+  };
+}
+
 // Shared reset applied whenever anchor is dropped or cleared
 const ALARM_RESET = {
   alarmLevel: 'silent' as AlarmLevel,
+  pendingAlarmLevel: 'silent' as AlarmLevel,
+  pendingAlarmCount: 0,
   gpsCancelledAt: null as null,
   draggingCancelledAt: null as null,
   alarmReFireTick: 0,
@@ -92,6 +114,8 @@ const initialState: AnchorState = {
   currentDistance: 0,
   isDragging: false,
   alarmLevel: 'silent',
+  pendingAlarmLevel: 'silent',
+  pendingAlarmCount: 0,
   gpsCancelledAt: null,
   draggingCancelledAt: null,
   alarmReFireTick: 0,
@@ -138,19 +162,24 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
     const state = get();
     const cutoff = Date.now() - (state.trackRetentionHours ?? DEFAULT_RETENTION_HOURS) * 3_600_000;
 
+    const effectiveRadius = computeEffectiveRadius(state.watchRadius, state.tideEnabled, state.anchorTideHeight, state.currentTideHeight);
+    const trusted = isFixTrusted(coord.accuracy, effectiveRadius);
+
     const base = {
       boatPosition: coord,
       positionHistory: (state.isTrackingPaused || !state.isPremium)
         ? state.positionHistory.filter((p) => p.timestamp > cutoff)
         : [...state.positionHistory.filter((p) => p.timestamp > cutoff), coord],
-      gpsStatus: 'ok' as GpsStatus,
+      gpsStatus: (trusted ? 'ok' : 'degraded') as GpsStatus,
       gpsAccuracy: coord.accuracy ?? null,
       gpsLostAt: null,
       // Clear GPS cancel when GPS signal returns — dragging alarm fires independently
       ...(state.gpsStatus === 'lost' ? { gpsCancelledAt: null } : {}),
     };
 
-    if (!state.isWatchActive || !state.anchorPosition) {
+    // A poor-accuracy fix still moves the marker and extends the track, but is
+    // never allowed to change distance or alarm level (see utils/alarmLevel.ts).
+    if (!state.isWatchActive || !state.anchorPosition || !trusted) {
       set(base);
       return;
     }
@@ -162,8 +191,15 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
       coord.longitude
     );
 
-    const effectiveRadius = computeEffectiveRadius(state.watchRadius, state.tideEnabled, state.anchorTideHeight, state.currentTideHeight);
-    const alarmLevel = computeAlarmLevel(distance, effectiveRadius, state.customZone, coord, state.alarmThresholds.emergencyThresholdPct);
+    const { level: alarmLevel, pending } = nextAlarmLevel({
+      current: state.alarmLevel,
+      pending: { level: state.pendingAlarmLevel, count: state.pendingAlarmCount },
+      distance,
+      radius: effectiveRadius,
+      customZone: state.customZone,
+      boatPos: coord,
+      emergencyThresholdPct: state.alarmThresholds.emergencyThresholdPct,
+    });
 
     // Only clear draggingCancelledAt when alarm resolves AND no active cancel cooldown.
     // GPS jitter can cause brief silent readings while still outside the zone — if we
@@ -177,6 +213,8 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
       ...base,
       currentDistance: distance,
       alarmLevel,
+      pendingAlarmLevel: pending.level,
+      pendingAlarmCount: pending.count,
       isDragging: alarmLevel !== 'silent',
       // Only clear cancel stamp when alarm truly resolves (no active cooldown)
       ...(alarmLevel === 'silent' && !dragCancelActive ? { draggingCancelledAt: null } : {}),
@@ -185,38 +223,14 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
 
   setWatchRadius: (radius) => {
     const clampedRadius = Math.max(5, Math.min(500, radius));
-    const state = get();
-    if (state.isWatchActive && state.anchorPosition && state.gpsStatus !== 'lost') {
-      const er = computeEffectiveRadius(clampedRadius, state.tideEnabled, state.anchorTideHeight, state.currentTideHeight);
-      const newLevel = computeAlarmLevel(state.currentDistance, er, state.customZone, state.boatPosition, state.alarmThresholds.emergencyThresholdPct);
-      set({
-        watchRadius: clampedRadius,
-        alarmLevel: newLevel,
-        isDragging: newLevel !== 'silent',
-        ...(newLevel === 'silent' ? { draggingCancelledAt: null } : {}),
-      });
-    } else {
-      set({ watchRadius: clampedRadius });
-    }
+    set({ watchRadius: clampedRadius, ...recomputeLevel(get(), { watchRadius: clampedRadius }) });
     get().persistToStorage();
   },
 
   // Same as setWatchRadius but skips AsyncStorage write — use during continuous drag events.
   setWatchRadiusSilent: (radius) => {
     const clampedRadius = Math.max(5, Math.min(500, radius));
-    const state = get();
-    if (state.isWatchActive && state.anchorPosition && state.gpsStatus !== 'lost') {
-      const er = computeEffectiveRadius(clampedRadius, state.tideEnabled, state.anchorTideHeight, state.currentTideHeight);
-      const newLevel = computeAlarmLevel(state.currentDistance, er, state.customZone, state.boatPosition, state.alarmThresholds.emergencyThresholdPct);
-      set({
-        watchRadius: clampedRadius,
-        alarmLevel: newLevel,
-        isDragging: newLevel !== 'silent',
-        ...(newLevel === 'silent' ? { draggingCancelledAt: null } : {}),
-      });
-    } else {
-      set({ watchRadius: clampedRadius });
-    }
+    set({ watchRadius: clampedRadius, ...recomputeLevel(get(), { watchRadius: clampedRadius }) });
   },
 
   // Updates anchor coordinate visually during drag — no alarm reset, no persist.
@@ -346,13 +360,7 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
   },
 
   setTideEnabled: (enabled) => {
-    set({ tideEnabled: enabled });
-    const state = get();
-    if (state.isWatchActive && state.anchorPosition && state.gpsStatus !== 'lost') {
-      const er = computeEffectiveRadius(state.watchRadius, enabled, state.anchorTideHeight, state.currentTideHeight);
-      const newLevel = computeAlarmLevel(state.currentDistance, er, state.customZone, state.boatPosition, state.alarmThresholds.emergencyThresholdPct);
-      set({ alarmLevel: newLevel, isDragging: newLevel !== 'silent', ...(newLevel === 'silent' ? { draggingCancelledAt: null } : {}) });
-    }
+    set({ tideEnabled: enabled, ...recomputeLevel(get(), { tideEnabled: enabled }) });
     get().persistToStorage();
   },
 
@@ -367,25 +375,15 @@ export const useAnchorStore = create<AnchorStore>((set, get) => ({
 
   setAnchorTideHeight: (height) => {
     const h = Math.round(height * 10) / 10;
-    set({ anchorTideHeight: h });
     const state = get();
-    if (state.tideEnabled && state.isWatchActive && state.anchorPosition && state.gpsStatus !== 'lost') {
-      const er = computeEffectiveRadius(state.watchRadius, true, h, state.currentTideHeight);
-      const newLevel = computeAlarmLevel(state.currentDistance, er, state.customZone, state.boatPosition, state.alarmThresholds.emergencyThresholdPct);
-      set({ alarmLevel: newLevel, isDragging: newLevel !== 'silent', ...(newLevel === 'silent' ? { draggingCancelledAt: null } : {}) });
-    }
+    set({ anchorTideHeight: h, ...(state.tideEnabled ? recomputeLevel(state, { anchorTideHeight: h }) : {}) });
     get().persistToStorage();
   },
 
   setCurrentTideHeight: (height) => {
     const h = Math.round(height * 10) / 10;
-    set({ currentTideHeight: h });
     const state = get();
-    if (state.tideEnabled && state.isWatchActive && state.anchorPosition && state.gpsStatus !== 'lost') {
-      const er = computeEffectiveRadius(state.watchRadius, true, state.anchorTideHeight, h);
-      const newLevel = computeAlarmLevel(state.currentDistance, er, state.customZone, state.boatPosition, state.alarmThresholds.emergencyThresholdPct);
-      set({ alarmLevel: newLevel, isDragging: newLevel !== 'silent', ...(newLevel === 'silent' ? { draggingCancelledAt: null } : {}) });
-    }
+    set({ currentTideHeight: h, ...(state.tideEnabled ? recomputeLevel(state, { currentTideHeight: h }) : {}) });
     get().persistToStorage();
   },
 

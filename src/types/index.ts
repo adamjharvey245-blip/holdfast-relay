@@ -44,6 +44,9 @@ export interface AnchorState {
   currentDistance: number;
   isDragging: boolean;
   alarmLevel: AlarmLevel;
+  // Escalation candidate awaiting confirmation (see utils/alarmLevel.ts)
+  pendingAlarmLevel: AlarmLevel;
+  pendingAlarmCount: number;
   gpsCancelledAt: number | null;
   draggingCancelledAt: number | null;
   alarmReFireTick: number;

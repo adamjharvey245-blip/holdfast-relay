@@ -115,16 +115,44 @@ the OS can wake the app into it.
 
 ## Alarm System
 
-### Progressive Urgency
-| Level       | Trigger                              | Notification                        | Sound           |
-|-------------|--------------------------------------|-------------------------------------|-----------------|
-| `silent`    | < 80% of radius                      | None                                | —               |
-| `nudge`     | 80–100% of radius                    | Default priority                    | None            |
-| `alert`     | At boundary (100%)                   | High priority, bypass DnD           | alarm.wav       |
-| `emergency` | > emergencyThresholdPct% of radius   | MAX priority, bypass DnD            | alarm.wav       |
-| `gps_lost`  | No GPS fix for configured seconds    | MAX priority, bypass DnD            | alarm.wav       |
+### Alarm levels
+`AlarmLevel` is `silent | alert | emergency` (see `src/types`). GPS loss is not
+a separate level: it is `emergency` with `gpsStatus === 'lost'`, which selects
+the GPS-lost sound/notification instead of the drag one.
 
-`emergencyThresholdPct` is user-configurable in Settings (default 120%).
+| Level       | Trigger (circle zone)                 | Notification              | Sound     |
+|-------------|---------------------------------------|---------------------------|-----------|
+| `silent`    | distance < radius                     | None                      | —         |
+| `alert`     | distance ≥ radius                     | HIGH, bypass DnD          | alarm.mp3 |
+| `emergency` | distance ≥ radius × threshold%        | MAX, bypass DnD           | alarm.mp3 |
+| `emergency` + `gpsStatus: 'lost'` | no fix for gpsLostSecs, then a further 60 s | MAX, bypass DnD | alarm.mp3 |
+
+`emergencyThresholdPct` is user-configurable in Settings (default 120%). A custom
+polygon zone replaces the circle and only ever yields `silent`/`alert`.
+
+### False-alarm defences (`src/utils/alarmLevel.ts`)
+All three are applied in `updateBoatPosition` and covered by
+`src/__tests__/gpsQuality.test.ts` + `anchorStore.test.ts`.
+
+1. **Accuracy gate** — a fix with reported accuracy worse than
+   `max(20 m, effectiveRadius × 0.5)` (or negative = iOS "invalid") still moves
+   the marker and extends the track, but never changes `currentDistance` or
+   `alarmLevel`. `gpsStatus` becomes `'degraded'` and the signal bar shows
+   "LOW ACCURACY". An unreported (`null`) accuracy is trusted.
+2. **Confirmation** — escalating to a higher level needs
+   `ALARM_CONFIRM_FIXES` (2) consecutive trusted fixes that agree on the new
+   level (`pendingAlarmLevel` / `pendingAlarmCount` in the store). A real drag
+   is monotonic so this only costs one fix interval; jitter alternating across
+   the ring never reaches the count.
+3. **Hysteresis** — de-escalation is evaluated against thresholds ×
+   `ALARM_HYSTERESIS` (0.9), so a boat sitting on the ring doesn't toggle the
+   siren every fix. De-escalation itself is immediate.
+
+User-initiated changes (radius slider, tide settings) go through
+`recomputeLevel()` in the store and apply **instantly** with no confirmation —
+that's deliberate input, not GPS noise. `useAlarmSystem` only treats a
+`lost ↔ not-lost` flip of `gpsStatus` as a re-fire trigger; `ok ↔ degraded`
+flips are frequent and ignored.
 
 ### iOS Critical Alerts
 Requires entitlement from Apple: `com.apple.developer.usernotifications.critical-alerts`.

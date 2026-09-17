@@ -253,7 +253,9 @@ export function useAlarmSystem() {
 
   useEffect(() => {
     const levelChanged = alarmLevel !== prevAlarmLevel.current;
-    const gpsChanged = gpsStatus !== prevGpsStatus.current;
+    // Only a lost ↔ not-lost flip matters here (it decides GPS-lost vs drag
+    // emergency). ok ↔ degraded flips are frequent and must not re-fire.
+    const gpsChanged = (gpsStatus === 'lost') !== (prevGpsStatus.current === 'lost');
     const reFireChanged = alarmReFireTick !== prevReFireTick.current;
 
     if (!levelChanged && !gpsChanged && !reFireChanged) return;
