@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
 import { TOUR_KEY } from './onboarding';
 import { useRouter } from 'expo-router';
+import Constants from 'expo-constants';
+import * as Application from 'expo-application';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useAnchorStore } from '@/store/anchorStore';
@@ -289,7 +291,7 @@ export default function SettingsScreen() {
         {/* ABOUT */}
         <Section title="ABOUT">
           <InfoRow label="App" value="HoldFast Anchor Alarm" />
-          <InfoRow label="Version" value="1.0.0 (build 25)" />
+          <InfoRow label="Version" value={`${Constants.expoConfig?.version ?? "?"} (build ${Application.nativeBuildVersion ?? "?"})`} />
           <InfoRow label="GPS formula" value="Haversine (great-circle)" />
           <InfoRow label="Background GPS" value="Expo Location task manager" />
           <TouchableOpacity
