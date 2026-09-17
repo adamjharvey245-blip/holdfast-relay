@@ -36,9 +36,9 @@ holdfast/
 │
 ├── src/
 │   ├── hooks/
-│   │   ├── useAnchorLogic.ts   # Haversine distance + alarm state machine
 │   │   ├── useGpsTracker.ts    # expo-location foreground + background task
-│   │   └── useAlarmSystem.ts   # expo-notifications, Critical Alerts
+│   │   ├── useAlarmSystem.ts   # In-app siren/vibration + foreground notifications
+│   │   └── useSilentModeWarning.ts # Warns when backgrounded with phone on silent
 │   │
 │   ├── components/
 │   │   ├── RadarMap.tsx         # react-native-maps with dark maritime style
@@ -48,13 +48,18 @@ holdfast/
 │   │   └── RemoteWatchPanel.tsx # 4-digit code + share link
 │   │
 │   ├── services/
+│   │   ├── alarmNotifications.ts # SINGLE SOURCE for channel IDs + alarm notification content
 │   │   └── websocketRelay.ts    # WebSocket relay client
 │   │
 │   ├── store/
 │   │   └── anchorStore.ts       # Zustand global state
 │   │
 │   ├── types/index.ts           # All TypeScript interfaces
-│   └── utils/haversine.ts       # Haversine formula + geometry helpers
+│   ├── utils/
+│   │   ├── haversine.ts         # Haversine formula + geometry helpers
+│   │   ├── alarmLevel.ts        # Pure distance → alarm level + tide radius maths
+│   │   └── trackSegments.ts     # Snail-trail segmentation (reference-stable)
+│   └── __tests__/               # Jest unit tests (npm test)
 │
 ├── server/
 │   ├── relay.js            # Node.js WebSocket relay server
@@ -125,6 +130,40 @@ the OS can wake the app into it.
 Requires entitlement from Apple: `com.apple.developer.usernotifications.critical-alerts`.
 In development, request with `allowCriticalAlerts: true` in `requestPermissionsAsync`.
 Critical Alerts bypass Silent Mode and Focus modes at full volume.
+
+The code already requests the permission and sends alarm notifications with
+`interruptionLevel: 'critical'`, but iOS silently downgrades them until the
+entitlement is granted. **Do not add the entitlement to `app.json` before Apple
+approves it** — EAS cannot generate a matching provisioning profile and the build
+fails at signing. Apply at https://developer.apple.com/contact/request/notifications-critical-alerts-entitlement/
+then, once approved, add:
+
+```json
+"ios": {
+  "entitlements": {
+    "com.apple.developer.usernotifications.critical-alerts": true
+  }
+}
+```
+
+### Sounding through Silent Mode
+- **iOS, app alive:** `playsInSilentModeIOS: true` on the expo-av loop plays through the
+  mute switch. `UIBackgroundModes` includes `audio` so the loop keeps going in the background.
+- **iOS, app suspended:** only a Critical Alert notification sounds on silent (see above).
+  Without the entitlement, silent = vibration only.
+- **Android:** alarm channels use `AndroidAudioUsage.ALARM`, so notification sound rides the
+  ALARM stream, which the ringer's silent/vibrate modes do not mute. Channels are immutable
+  once created, so any change to their audio settings needs a new channel ID (currently `_v2`).
+- `useSilentModeWarning` posts a warning when the app is backgrounded with the phone on silent.
+
+### Two alarm paths, one notification module
+Alarm notifications are posted from two places: `useAlarmSystem` (React mounted)
+and the `HOLDFAST_BG_LOCATION` task in `useGpsTracker` (React NOT mounted — iOS
+cold-start). Both import channel IDs and content from
+`src/services/alarmNotifications.ts`. **Never hard-code a channel ID anywhere
+else** — a channel that isn't created falls back to Android's "Miscellaneous"
+channel (no alarm sound, no DnD bypass) with no error. The test in
+`src/__tests__/alarmNotifications.test.ts` guards this.
 
 ### Android Alarm Stream
 Channels with `bypassDnd: true` and `importance: MAX` use the ALARM notification
@@ -211,13 +250,17 @@ eas build --platform android # Google Play
 
 ---
 
-## Linting
+## Linting & Tests
 
 ```bash
 npx expo lint
+npm test
 ```
 
-Run after each major component. ESLint config is managed by Expo's default preset.
+Run both after each major change. ESLint config is managed by Expo's default
+preset. Tests use `jest-expo`; keep safety-critical logic (distance maths, alarm
+levels, notification channels) in pure modules under `src/utils` /
+`src/services` so it stays unit-testable without native mocks.
 
 ---
 

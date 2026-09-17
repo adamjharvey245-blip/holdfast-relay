@@ -1,48 +1,15 @@
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import { Audio } from 'expo-av';
-import { Platform, Vibration } from 'react-native';
+import { Vibration } from 'react-native';
 import { useAnchorStore } from '@/store/anchorStore';
 import { getSoundSource } from '@/config/sounds';
+import {
+  setupNotificationChannels,
+  scheduleAlarmNotification,
+  type AlarmKind,
+} from '@/services/alarmNotifications';
 import type { AlarmLevel } from '@/types';
-
-// ─── Notification channel IDs ─────────────────────────────────────────────────
-
-const CHANNEL_ALERT = 'anchor_alert';
-const CHANNEL_EMERGENCY = 'anchor_emergency';
-const CHANNEL_GPS_LOST = 'anchor_gps_lost';
-
-// ─── Configure channels once ──────────────────────────────────────────────────
-
-async function setupNotificationChannels() {
-  if (Platform.OS !== 'android') return;
-
-  await Notifications.setNotificationChannelAsync(CHANNEL_ALERT, {
-    name: 'Anchor Alert',
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 400, 200, 400],
-    bypassDnd: true,
-    sound: 'default',
-  });
-
-  await Notifications.setNotificationChannelAsync(CHANNEL_EMERGENCY, {
-    name: 'Anchor Emergency',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 500, 200, 500, 200, 500],
-    bypassDnd: true,
-    sound: 'default',
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-  });
-
-  await Notifications.setNotificationChannelAsync(CHANNEL_GPS_LOST, {
-    name: 'GPS Signal Lost',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 1000, 500, 1000],
-    bypassDnd: true,
-    sound: 'default',
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-  });
-}
 
 // ─── Vibration patterns ───────────────────────────────────────────────────────
 // ALERT:     two firm pulses, then silence — clearly attention-getting but not frantic
@@ -99,7 +66,7 @@ export function useAlarmSystem() {
 
   // ── Sound management ─────────────────────────────────────────────────────
 
-  const loadSoundForLevel = async (level: 'alert' | 'emergency' | 'gps_lost'): Promise<Audio.Sound | null> => {
+  const loadSoundForLevel = async (level: AlarmKind): Promise<Audio.Sound | null> => {
     const key = level === 'alert'
       ? (alarmThresholds.alertSoundKey ?? 'alarm')
       : level === 'gps_lost'
@@ -131,7 +98,7 @@ export function useAlarmSystem() {
     }
   };
 
-  const playSound = async (level: 'alert' | 'emergency' | 'gps_lost') => {
+  const playSound = async (level: AlarmKind) => {
     const sound = await loadSoundForLevel(level);
     if (!shouldPlayRef.current) return;
     if (sound) {
@@ -168,7 +135,7 @@ export function useAlarmSystem() {
     Vibration.cancel();
   };
 
-  const startAlarm = (level: 'alert' | 'emergency' | 'gps_lost', pattern: number[], repeatMs = 4000) => {
+  const startAlarm = (level: AlarmKind, pattern: number[], repeatMs = 4000) => {
     shouldPlayRef.current = true;
     startVibration(pattern, repeatMs);
     playSound(level);
@@ -221,28 +188,12 @@ export function useAlarmSystem() {
   };
 
   // ── Fire notification ────────────────────────────────────────────────────
+  // Content + channel come from services/alarmNotifications so this path and
+  // the background location task always post identical notifications.
 
-  const fireNotification = async (
-    title: string,
-    body: string,
-    channelId: string,
-    critical = false
-  ) => {
+  const fireNotification = async (kind: AlarmKind, distanceM: number, radiusM: number) => {
     await dismissActive();
-    const id = await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        sound: 'alarm.mp3',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        ...(Platform.OS === 'ios' && critical
-          ? { interruptionLevel: 'critical' }
-          : {}),
-      },
-      trigger: null,
-      ...(Platform.OS === 'android' ? { channelId } : {}),
-    } as Notifications.NotificationRequestInput);
-    activeNotifRef.current = id;
+    activeNotifRef.current = await scheduleAlarmNotification(kind, { distanceM, radiusM });
   };
 
   // ── Stop alarm immediately when user cancels ────────────────────────────
@@ -337,12 +288,7 @@ export function useAlarmSystem() {
     switch (alarmLevel) {
       case 'alert':
         if (!dragAlarmCancelled && (state.alarmThresholds.alertEnabled ?? true)) {
-          fireNotification(
-            '⚠️ ANCHOR DRAG ALERT',
-            `Boat has reached the ${watchRadius}m boundary (${dist}m from anchor).`,
-            CHANNEL_ALERT,
-            true
-          );
+          fireNotification('alert', dist, watchRadius);
           startAlarm('alert', VIBRATE_ALERT, 6000);
         }
         break;
@@ -350,22 +296,12 @@ export function useAlarmSystem() {
       case 'emergency':
         if (gpsStatus === 'lost') {
           if (!gpsAlarmCancelled && (state.alarmThresholds.gpsLostEnabled ?? true)) {
-            fireNotification(
-              '🔴 GPS SIGNAL LOST',
-              'No GPS fix. Anchor position unknown — check immediately!',
-              CHANNEL_GPS_LOST,
-              true
-            );
+            fireNotification('gps_lost', dist, watchRadius);
             startAlarm('gps_lost', VIBRATE_EMERGENCY, 2000);
           }
         } else {
           if (!dragAlarmCancelled && (state.alarmThresholds.emergencyEnabled ?? true)) {
-            fireNotification(
-              '🚨 ANCHOR DRAGGING — EMERGENCY',
-              `Boat is ${dist}m from anchor — ${dist - watchRadius}m past boundary. IMMEDIATE ACTION REQUIRED!`,
-              CHANNEL_EMERGENCY,
-              true
-            );
+            fireNotification('emergency', dist, watchRadius);
             startAlarm('emergency', VIBRATE_EMERGENCY, 2000);
           }
         }

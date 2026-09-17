@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
 import { useAnchorStore } from '@/store/anchorStore';
+import { scheduleAlarmNotification } from '@/services/alarmNotifications';
 import type { AlarmLevel, TimestampedCoordinate } from '@/types';
 
 export const BACKGROUND_LOCATION_TASK = 'HOLDFAST_BG_LOCATION';
@@ -45,45 +45,19 @@ let bgLastAlarmLevel: AlarmLevel = 'silent';
 let bgLastNotifAt = 0;
 const BG_NOTIF_COOLDOWN_MS = 90_000; // minimum gap between background alarm notifications
 
+// Alarm notification content + Android channel IDs live in
+// services/alarmNotifications so this background path and the foreground
+// useAlarmSystem hook can never post to different channels.
+
 async function fireBgAlarmNotification(level: AlarmLevel, dist: number, radius: number) {
-  const isEmergency = level === 'emergency';
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: isEmergency ? '🚨 ANCHOR DRAGGING — EMERGENCY' : '⚠️ ANCHOR DRAG ALERT',
-        body: isEmergency
-          ? `Boat is ${dist}m from anchor — ${dist - radius}m past boundary. IMMEDIATE ACTION REQUIRED!`
-          : `Boat has reached the ${radius}m boundary (${dist}m from anchor).`,
-        sound: 'alarm.mp3',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        ...(Platform.OS === 'ios' ? { interruptionLevel: 'critical' } : {}),
-      } as any,
-      trigger: null,
-      ...(Platform.OS === 'android'
-        ? { channelId: isEmergency ? 'anchor_emergency' : 'anchor_alert' }
-        : {}),
-    } as Notifications.NotificationRequestInput);
-  } catch (e) {
-    console.warn('[BG Location] Failed to schedule alarm notification:', e);
-  }
+  await scheduleAlarmNotification(level === 'emergency' ? 'emergency' : 'alert', {
+    distanceM: dist,
+    radiusM: radius,
+  });
 }
 
 async function fireBgGpsLostNotification() {
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '🔴 GPS SIGNAL LOST',
-        body: 'No GPS fix. Anchor position unknown — check immediately!',
-        sound: 'alarm.mp3',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        ...(Platform.OS === 'ios' ? { interruptionLevel: 'critical' } : {}),
-      } as any,
-      trigger: null,
-      ...(Platform.OS === 'android' ? { channelId: 'anchor_gps_lost' } : {}),
-    } as Notifications.NotificationRequestInput);
-  } catch (e) {
-    console.warn('[BG Location] Failed to schedule GPS lost notification:', e);
-  }
+  await scheduleAlarmNotification('gps_lost');
 }
 
 function cancelAlarmTimer() {

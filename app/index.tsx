@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Alert, Animated, AppState, Platform, Modal, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Alert, Animated, Modal, TextInput, KeyboardAvoidingView, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -12,6 +12,7 @@ import { tourRefs } from '@/components/tourTargets';
 import { useAnchorStore } from '@/store/anchorStore';
 import { useTideData } from '@/hooks/useTideData';
 import { useReviewPrompt } from '@/hooks/useReviewPrompt';
+import { useSilentModeWarning } from '@/hooks/useSilentModeWarning';
 import { offsetCoordinate, bearingDegrees } from '@/utils/haversine';
 import { TOUR_KEY } from './onboarding';
 
@@ -567,40 +568,9 @@ export default function HomeScreen() {
   };
 
   // ── Silent mode warning on background ──────────────────────────────────────
-  // Fire once per session when the app goes to background with watch active.
-  // iOS Critical Alerts bypass the hardware mute switch, so the alarm WILL fire,
-  // but this notice prompts the user to check their volume before sleeping.
-  // Android handles this via notification channels (bypassDnd) — no extra prompt needed.
-
-  const silentCheckRef = useRef(false); // reset each time app returns to foreground
-
-  useEffect(() => {
-    if (Platform.OS !== 'ios') return;
-    const sub = AppState.addEventListener('change', async (nextState) => {
-      if (nextState !== 'background') {
-        silentCheckRef.current = false;
-        return;
-      }
-      if (silentCheckRef.current) return;
-      silentCheckRef.current = true;
-
-      const state = useAnchorStore.getState();
-      if (!state.isWatchActive || !state.alarmsEnabled) return;
-
-      const Notifications = await import('expo-notifications');
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '⚠️ Check phone volume',
-          body: 'Anchor watch is active. Make sure your phone is not on silent — the alarm must be audible.',
-          sound: undefined,
-          priority: 'high' as any,
-        },
-        trigger: null,
-      });
-    });
-
-    return () => sub.remove();
-  }, []);
+  // Posts a warning notification if the app is backgrounded with the watch
+  // active while the phone is on silent (iOS mute switch / Android ringer mode).
+  useSilentModeWarning();
 
   const {
     anchorPosition,

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { haversineDistance, pointInPolygon } from '../utils/haversine';
+import { haversineDistance } from '../utils/haversine';
+import { computeAlarmLevel, computeEffectiveRadius } from '../utils/alarmLevel';
 import type {
   AnchorState,
   AlarmLevel,
@@ -26,31 +27,6 @@ const DEFAULT_THRESHOLDS: AlarmThresholds = {
   emergencyEnabled: true,
   gpsLostEnabled: true,
 };
-
-function computeEffectiveRadius(
-  watchRadius: number,
-  tideEnabled: boolean,
-  anchorTideHeight: number,
-  currentTideHeight: number
-): number {
-  if (!tideEnabled) return watchRadius;
-  return Math.max(5, watchRadius + anchorTideHeight - currentTideHeight);
-}
-
-function computeAlarmLevel(
-  distance: number,
-  radius: number,
-  customZone: Coordinate[] | null,
-  boatPos: Coordinate | null,
-  emergencyThresholdPct = 120
-): AlarmLevel {
-  if (customZone && customZone.length >= 3 && boatPos) {
-    return pointInPolygon(boatPos, customZone) ? 'silent' : 'alert';
-  }
-  if (distance >= radius * (emergencyThresholdPct / 100)) return 'emergency';
-  if (distance >= radius) return 'alert';
-  return 'silent';
-}
 
 // Shared reset applied whenever anchor is dropped or cleared
 const ALARM_RESET = {

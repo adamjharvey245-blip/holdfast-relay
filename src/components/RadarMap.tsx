@@ -12,6 +12,14 @@ import { useAnchorStore } from '@/store/anchorStore';
 import { haversineDistance } from '@/utils/haversine';
 import { tourRefs } from '@/components/tourTargets';
 import type { MapRegion } from '@/types';
+import { buildTrackSegments, TRACK_SEGMENT_COUNT, type TrackSegment } from '@/utils/trackSegments';
+
+// ─── Snail-trail rendering constants (module scope → stable references) ──────
+// Always exactly TRACK_SEGMENT_COUNT Polylines. Segment 0 = most recent 0–4h,
+// segment 5 = 20–24h. Empty segments are drawn transparent with a fixed
+// off-screen placeholder so the native view count never changes.
+const SEGMENT_COLORS = ['#00d4ff', '#10b981', '#C9A227', '#f97316', '#a855f7', '#3b82f6'];
+const FALLBACK_COORDS = [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.0001 }];
 
 interface RadarMapProps {
   onLongPress?: (coordinate: { latitude: number; longitude: number }) => void;
@@ -40,7 +48,6 @@ export function RadarMap({
 
   const [mapStyle, setMapStyle] = useState<'satellite' | 'standard' | 'chart'>('satellite');
   const [anchorLocked, setAnchorLocked] = useState(true);
-  const [latitudeDelta, setLatitudeDelta] = useState(0.005);
 
   // Unlock hint toast
   const unlockToastAnim = useRef(new Animated.Value(0)).current;
@@ -75,26 +82,14 @@ export function RadarMap({
   } = useAnchorStore();
 
   // ── Track colour segments ─────────────────────────────────────────────────
-  // Always exactly 6 Polylines (fixed count = MapView stable).
-  // Each covers a 4-hour window. Segment 0 = most recent 0–4h, segment 5 = 20–24h.
-  const SEGMENT_COLORS = ['#00d4ff', '#10b981', '#C9A227', '#f97316', '#a855f7', '#3b82f6'];
-  const SEGMENT_HOURS = 4;
-  const NUM_SEGMENTS = 6;
-  const FALLBACK_COORDS = [{ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.0001 }];
-
+  // Built with reference-stable output: a segment whose points have not
+  // changed keeps its previous array, so react-native-maps only touches the
+  // native overlays that actually need updating (see utils/trackSegments.ts).
+  const trackSegmentsRef = useRef<TrackSegment[] | null>(null);
   const trackSegments = useMemo(() => {
-    const now = Date.now();
-    return Array.from({ length: NUM_SEGMENTS }, (_, seg) => {
-      const segEnd = now - seg * SEGMENT_HOURS * 3_600_000;
-      const segStart = segEnd - SEGMENT_HOURS * 3_600_000;
-      const pts = positionHistory.filter(
-        (p) => p.timestamp > segStart && p.timestamp <= segEnd
-      );
-      // Need at least 2 points for a visible line
-      return pts.length >= 2
-        ? pts.map((p) => ({ latitude: p.latitude, longitude: p.longitude }))
-        : null;
-    });
+    const next = buildTrackSegments(positionHistory, Date.now(), trackSegmentsRef.current);
+    trackSegmentsRef.current = next;
+    return next;
   }, [positionHistory]);
 
   const effectiveRadius = tideEnabled
@@ -108,17 +103,37 @@ export function RadarMap({
 
   const isPlayback = selectedHistoryIndex !== null;
 
+  // Last known map region (kept in sync from onRegionChange). Used for
+  // synchronous screen→geo maths and to preserve zoom while following.
+  const mapRegionRef = useRef({
+    latitude: boatPosition?.latitude ?? 55.0,
+    longitude: boatPosition?.longitude ?? -4.0,
+    latitudeDelta: 0.005,
+    longitudeDelta: 0.005,
+  });
+
   // ── Auto-centre on boat ──────────────────────────────────────────────────
 
+  // Re-centre on every fix while following, but keep whatever zoom the user
+  // has chosen. Only snap to the close-up zoom when follow is (re)enabled —
+  // forcing 0.002 on every fix undid pinch-zooms within seconds and made the
+  // trail overlays flicker as the map jumped.
+  const wasFollowingRef = useRef(false);
   useEffect(() => {
-    if (!followBoat || !displayBoatPosition || !mapRef.current) return;
+    if (!followBoat || !displayBoatPosition || !mapRef.current) {
+      wasFollowingRef.current = followBoat;
+      return;
+    }
+    const justEnabled = !wasFollowingRef.current;
+    wasFollowingRef.current = true;
+    const current = mapRegionRef.current;
     const region: MapRegion = {
       latitude: displayBoatPosition.latitude,
       longitude: displayBoatPosition.longitude,
-      latitudeDelta: 0.002,
-      longitudeDelta: 0.002,
+      latitudeDelta: justEnabled ? 0.002 : current.latitudeDelta,
+      longitudeDelta: justEnabled ? 0.002 : current.longitudeDelta,
     };
-    mapRef.current.animateToRegion(region, 600);
+    mapRef.current.animateToRegion(region, justEnabled ? 600 : 400);
   }, [displayBoatPosition, followBoat]);
 
   // ── Distance ring data ───────────────────────────────────────────────────
@@ -177,12 +192,6 @@ export function RadarMap({
   // converts screen coordinates to geo-coordinates synchronously, giving
   // instant response with no UILongPressGestureRecognizer delay.
 
-  const mapRegionRef = useRef({
-    latitude: boatPosition?.latitude ?? 55.0,
-    longitude: boatPosition?.longitude ?? -4.0,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-  });
   const mapSizeRef = useRef({ width: 1, height: 1 });
   const dragTargetRef = useRef<'anchor' | 'radius' | null>(null);
   const dragStartLocRef = useRef({ x: 0, y: 0 });
@@ -318,10 +327,7 @@ export function RadarMap({
         pitchEnabled={false}
         onPanDrag={() => setFollowBoat(false)}
         onRegionChange={(r) => { mapRegionRef.current = r; }}
-        onRegionChangeComplete={(r) => {
-          mapRegionRef.current = r;
-          setLatitudeDelta(r.latitudeDelta);
-        }}
+        onRegionChangeComplete={(r) => { mapRegionRef.current = r; }}
         onLongPress={(!drawingMode && anchorLocked) ? (e) => onLongPress?.(e.nativeEvent.coordinate) : undefined}
         onPress={(drawingMode || onMapPress) ? handleMapPress : undefined}
         initialRegion={{
@@ -350,14 +356,16 @@ export function RadarMap({
           </>
         )}
 
-        {/* Snail trail — always exactly 6 Polylines, one per 4-hour segment */}
+        {/* Snail trail — always exactly TRACK_SEGMENT_COUNT Polylines, one per 4-hour segment */}
         {trackSegments.map((coords, seg) => (
           <Polyline
             key={`track-seg-${seg}`}
             coordinates={coords ?? FALLBACK_COORDS}
             strokeColor={coords ? SEGMENT_COLORS[seg] : 'transparent'}
             strokeWidth={coords ? 4 : 0}
-            zIndex={NUM_SEGMENTS - seg}
+            lineCap="round"
+            lineJoin="round"
+            zIndex={TRACK_SEGMENT_COUNT - seg}
           />
         ))}
 
