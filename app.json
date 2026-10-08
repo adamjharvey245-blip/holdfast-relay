@@ -17,6 +17,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.holdfast.app",
+      "entitlements": {
+        "com.apple.developer.usernotifications.critical-alerts": true
+      },
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "HoldFast needs continuous GPS access to monitor your anchor position and alert you if the boat drags — even when the screen is off.",
         "NSLocationAlwaysUsageDescription": "HoldFast needs background GPS access to monitor anchor position while the screen is off.",

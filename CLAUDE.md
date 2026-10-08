@@ -159,26 +159,24 @@ Requires entitlement from Apple: `com.apple.developer.usernotifications.critical
 In development, request with `allowCriticalAlerts: true` in `requestPermissionsAsync`.
 Critical Alerts bypass Silent Mode and Focus modes at full volume.
 
-The code already requests the permission and sends alarm notifications with
-`interruptionLevel: 'critical'`, but iOS silently downgrades them until the
-entitlement is granted. **Do not add the entitlement to `app.json` before Apple
-approves it** — EAS cannot generate a matching provisioning profile and the build
-fails at signing. Apply at https://developer.apple.com/contact/request/notifications-critical-alerts-entitlement/
-then, once approved, add:
+Apple approved the entitlement for `com.holdfast.app` (October 2026) and it is
+set in `app.json` under `ios.entitlements`. The App ID must keep the "Critical
+Alerts" capability enabled in the Apple Developer portal, or EAS cannot generate
+a matching provisioning profile and the build fails at signing. Alarm
+notifications are sent with `interruptionLevel: 'critical'`.
 
-```json
-"ios": {
-  "entitlements": {
-    "com.apple.developer.usernotifications.critical-alerts": true
-  }
-}
-```
+`src/services/criticalAlerts.ts` classifies `ios.allowsCriticalAlerts` as
+`granted` / `denied` / `unavailable` (`null` = build has no entitlement). Two
+consumers are gated on it:
+`useCriticalAlertsNudge` (one-time "Open Settings" prompt on watch start when
+`denied`) and `useSilentModeWarning` (skips the silent-phone warning on iOS when
+`granted`).
 
 ### Sounding through Silent Mode
 - **iOS, app alive:** `playsInSilentModeIOS: true` on the expo-av loop plays through the
   mute switch. `UIBackgroundModes` includes `audio` so the loop keeps going in the background.
 - **iOS, app suspended:** only a Critical Alert notification sounds on silent (see above).
-  Without the entitlement, silent = vibration only.
+  If the user denies Critical Alerts, silent = vibration only.
 - **Android:** alarm channels use `AndroidAudioUsage.ALARM`, so notification sound rides the
   ALARM stream, which the ringer's silent/vibrate modes do not mute. Channels are immutable
   once created, so any change to their audio settings needs a new channel ID (currently `_v2`).
@@ -273,7 +271,7 @@ eas build --platform android # Google Play
 
 ### Apple App Store Notes
 - Background location requires justification in App Store review
-- Critical Alerts entitlement requires Apple approval
+- Critical Alerts entitlement is approved (Request ID 93MVX7WS3C)
 - Describe the maritime safety use case clearly
 
 ---

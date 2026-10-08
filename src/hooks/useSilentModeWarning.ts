@@ -3,6 +3,7 @@ import { AppState, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { VolumeManager, RINGER_MODE } from 'react-native-volume-manager';
 import { useAnchorStore } from '@/store/anchorStore';
+import { getCriticalAlertsStatus } from '@/services/criticalAlerts';
 
 // ─── Silent-mode warning on background ───────────────────────────────────────
 //
@@ -13,8 +14,10 @@ import { useAnchorStore } from '@/store/anchorStore';
 //          react-native-volume-manager infers it by timing a silent system
 //          sound. That check only runs reliably in the foreground, so we keep a
 //          listener alive while the watch is active and cache the last result.
-//          Critical Alerts (if entitled) and playsInSilentModeIOS mean the
-//          alarm should still sound, but the user must not rely on that.
+//          If the user has granted Critical Alerts (entitled build), the alarm
+//          notification sounds through the mute switch regardless, so the
+//          warning is skipped. Otherwise only playsInSilentModeIOS helps, and
+//          only while the app is alive, so we still warn.
 // Android: AudioManager ringer mode is readable at any time. Both SILENT and
 //          VIBRATE are treated as silent. The alarm channels route through the
 //          ALARM audio stream (see useAlarmSystem) which is not muted by the
@@ -110,6 +113,11 @@ export function useSilentModeWarning() {
 
       const silent = await isPhoneSilent(iosMutedRef.current);
       if (!silent) return;
+
+      if (Platform.OS === 'ios' && (await getCriticalAlertsStatus()) === 'granted') {
+        console.log('[SilentModeWarning] phone is silent but Critical Alerts granted — no warning');
+        return;
+      }
 
       console.log('[SilentModeWarning] phone is silent with watch active — warning user');
       await postWarning();

@@ -13,6 +13,7 @@ import { useAnchorStore } from '@/store/anchorStore';
 import { useTideData } from '@/hooks/useTideData';
 import { useReviewPrompt } from '@/hooks/useReviewPrompt';
 import { useSilentModeWarning } from '@/hooks/useSilentModeWarning';
+import { useCriticalAlertsNudge } from '@/hooks/useCriticalAlertsNudge';
 import { offsetCoordinate, bearingDegrees } from '@/utils/haversine';
 import { TOUR_KEY } from './onboarding';
 
@@ -574,6 +575,11 @@ export default function HomeScreen() {
   // Posts a warning notification if the app is backgrounded with the watch
   // active while the phone is on silent (iOS mute switch / Android ringer mode).
   useSilentModeWarning();
+
+  // ── Critical Alerts nudge (iOS) ────────────────────────────────────────────
+  // One-time prompt to enable Critical Alerts in Settings when a watch starts
+  // on an entitled build where the user hasn't granted them. Inert otherwise.
+  useCriticalAlertsNudge();
 
   const {
     anchorPosition,
